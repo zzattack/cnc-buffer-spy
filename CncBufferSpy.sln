@@ -1,0 +1,54 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30128.74
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CncBufferSpyClient", "CncBufferSpyClient\CncBufferSpyClient.csproj", "{43D38C02-C22D-4943-B79A-896B2124735D}"
+	ProjectSection(ProjectDependencies) = postProject
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A} = {F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "CncBufferSpyHook", "CncBufferSpyHook\CncBufferSpyHook.vcxproj", "{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{43D38C02-C22D-4943-B79A-896B2124735D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{43D38C02-C22D-4943-B79A-896B2124735D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{43D38C02-C22D-4943-B79A-896B2124735D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{43D38C02-C22D-4943-B79A-896B2124735D}.Debug|x64.Build.0 = Debug|Any CPU
+		{43D38C02-C22D-4943-B79A-896B2124735D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{43D38C02-C22D-4943-B79A-896B2124735D}.Debug|x86.Build.0 = Debug|Any CPU
+		{43D38C02-C22D-4943-B79A-896B2124735D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{43D38C02-C22D-4943-B79A-896B2124735D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{43D38C02-C22D-4943-B79A-896B2124735D}.Release|x64.ActiveCfg = Release|Any CPU
+		{43D38C02-C22D-4943-B79A-896B2124735D}.Release|x64.Build.0 = Release|Any CPU
+		{43D38C02-C22D-4943-B79A-896B2124735D}.Release|x86.ActiveCfg = Release|Any CPU
+		{43D38C02-C22D-4943-B79A-896B2124735D}.Release|x86.Build.0 = Release|Any CPU
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}.Debug|Any CPU.Build.0 = Debug|Win32
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}.Debug|x64.ActiveCfg = Debug|x64
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}.Debug|x64.Build.0 = Debug|x64
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}.Debug|x86.ActiveCfg = Debug|Win32
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}.Debug|x86.Build.0 = Debug|Win32
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}.Release|Any CPU.ActiveCfg = Release|Win32
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}.Release|Any CPU.Build.0 = Release|Win32
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}.Release|x64.ActiveCfg = Release|x64
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}.Release|x64.Build.0 = Release|x64
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}.Release|x86.ActiveCfg = Release|Win32
+		{F6D64603-4C8F-4B1A-BCE2-0D93B99E066A}.Release|x86.Build.0 = Release|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {0AA5D3F8-A314-4559-8F86-9CAE52BB1768}
+	EndGlobalSection
+EndGlobal

@@ -1,0 +1,5 @@
+LIBRARY     Ra2DepthBufferSpyHook.dll
+
+EXPORTS
+	StartProcess
+	InjectToRunningProcess
