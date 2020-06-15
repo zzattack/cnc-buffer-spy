@@ -11,34 +11,46 @@ HINSTANCE sInstanceHandle;
 bool sIsHookedInstance = false;
 PipeServer pipeServer;
 HANDLE hMap1 = NULL, hMap2 = NULL;
+unsigned int mapFileSize = 0;
 void* pMapBuf1 = NULL, * pMapBuf2 = NULL;
 bool tsHooked = false, ra2Hooked = false, yrHooked = false;
 std::atomic<pipe_request*> open_request;
 std::atomic<pipe_frame*> open_frame;
 
 
-int __cdecl GameLoopSpy(offsets_t* offsets) {
+bool EnsureBuffersCompatible(buffers_base_t* buffer)
+{
     // Create file mappings for 2 buffers
-    DWORD bufferSize = (*offsets->depth_buffer)->reso_h * (*offsets->depth_buffer)->reso_v * 2;
+    DWORD bufferSize = buffer->width * buffer->height * 2;
 
-    if (!hMap1)
+    if (0 < bufferSize && bufferSize < 8192*8192*2 && (!hMap1 || !hMap2 || !pMapBuf1 || !pMapBuf2 || mapFileSize != bufferSize))
     {
+        if (pMapBuf1 != nullptr) UnmapViewOfFile(pMapBuf1);
+        if (pMapBuf2 != nullptr) UnmapViewOfFile(pMapBuf2);
+        if (hMap1 != nullptr) CloseHandle(hMap1);
+        if (hMap2 != nullptr) CloseHandle(hMap2);
+
         hMap1 = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, bufferSize, "cnc_buffer_spy1");
         hMap2 = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, bufferSize, "cnc_buffer_spy2");
 
-        if (!hMap1 || !hMap2)
-        {
-            MessageBox(NULL, "Could not allocate map space", "Error", 0);
-        }
+        if (hMap1 && hMap2) {
+            mapFileSize = bufferSize;
 
-        pMapBuf1 = MapViewOfFile(hMap1, FILE_MAP_ALL_ACCESS, 0, 0, bufferSize);
-        pMapBuf2 = MapViewOfFile(hMap2, FILE_MAP_ALL_ACCESS, 0, 0, bufferSize);
-
-        if (!pMapBuf1 || !pMapBuf2)
-        {
-            MessageBox(NULL, "Could not allocate map space", "Error", 0);
+            pMapBuf1 = MapViewOfFile(hMap1, FILE_MAP_WRITE, 0, 0, mapFileSize);
+            pMapBuf2 = MapViewOfFile(hMap2, FILE_MAP_WRITE, 0, 0, mapFileSize);
+        
+            if (!pMapBuf1 || !pMapBuf2)
+                MessageBox(NULL, "Could not obtain map view", "Error", 0);
         }
+        else
+            MessageBox(NULL, "Could not allocate map space", "Error", 0);
     }
+
+    return hMap1 && hMap2 && pMapBuf1 && pMapBuf2 && mapFileSize == bufferSize;
+}
+
+
+int __cdecl GameLoopSpy(offsets_t* offsets) {
 
     int ret = offsets->game_loop();
 
@@ -46,25 +58,26 @@ int __cdecl GameLoopSpy(offsets_t* offsets) {
     pipe_request* req = open_request.exchange(nullptr);
     if (req)
     {
-        // copy current depth buffer into open_request's frame
-        if (req->buffer == pipe_buffer::buffer1)
-            memcpy(pMapBuf1, (*offsets->depth_buffer)->depth_buffer, bufferSize);
-        else if (req->buffer == pipe_buffer::buffer2)
-            memcpy(pMapBuf2, (*offsets->depth_buffer)->depth_buffer, bufferSize);
+        if (EnsureBuffersCompatible(*offsets->depth_buffer)) {
+            // copy current depth buffer into open_request's frame
+            if (req->buffer == pipe_buffer::buffer1)
+                memcpy(pMapBuf1, (*offsets->depth_buffer)->buffer, mapFileSize);
+            else if (req->buffer == pipe_buffer::buffer2)
+                memcpy(pMapBuf2, (*offsets->depth_buffer)->buffer, mapFileSize);
 
-        // nudge pipe server that request is filled
-        pipe_msg msg;
-        msg.msg_type = pipe_msg_type::frame_available;
-        msg.frame.framenr = *offsets->game_frame;
-        msg.frame.reso_h = (*offsets->depth_buffer)->reso_h;
-        msg.frame.reso_v = (*offsets->depth_buffer)->reso_v;
-        msg.frame.type = frame_type::depth;
-        msg.frame.buffer = req->buffer;
-        msg.frame.frame_memory_start = (uint32_t)(*offsets->depth_buffer)->depth_buffer;
-        msg.frame.anchor_offset = (uint32_t)(*offsets->depth_buffer)->anchor_offset;
-        std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
-        pipeServer.writeToPipe(v);
-
+            // nudge pipe server that request is filled
+            pipe_msg msg;
+            msg.msg_type = pipe_msg_type::frame_available;
+            msg.frame.framenr = *offsets->game_frame;
+            msg.frame.reso_h = (*offsets->depth_buffer)->width;
+            msg.frame.reso_v = (*offsets->depth_buffer)->height;
+            msg.frame.type = frame_type::depth;
+            msg.frame.buffer = req->buffer;
+            msg.frame.frame_memory_start = (uint32_t)(*offsets->depth_buffer)->buffer;
+            msg.frame.anchor_offset = (uint32_t)(*offsets->depth_buffer)->buffer_start;
+            std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
+            pipeServer.writeToPipe(v);
+        }
         delete req;
     }
 
@@ -213,7 +226,7 @@ bool APIENTRY DllMain(HINSTANCE hInstance, DWORD dwReason, void* lpReserved)
 
             // DetourDetach(&(PVOID&)Real_HeapAlloc, Mine_HeapAlloc);
             // DetourDetach(&(PVOID&)Real_HeapFree, Mine_HeapFree);
-            
+
             if (ra2Hooked)
                 DetourDetach(&(PVOID&)ra2_offsets.game_loop, GameLoopRA2);
             if (yrHooked)

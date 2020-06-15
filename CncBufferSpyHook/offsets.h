@@ -7,13 +7,13 @@ typedef int(__cdecl* GameLoop)();
 
 struct buffers_base_t
 {
-    uint32_t unknown1;
-    uint32_t unknown2;
-    uint32_t reso_h;
-    uint32_t reso_v;
-    uint32_t anchor_offset; // offset to depth_buffer that contains info for pixel 0,0. loops around.
-    uint32_t unknown3;
-    uint16_t* depth_buffer;
+    uint32_t x;
+    uint32_t y;
+    uint32_t width;
+    uint32_t height;
+    uint32_t buffer_start; // anchor to memory offset that contains info for pixel 0,0. loops around.
+    uint32_t buffer_end;
+    uint16_t* buffer;
 };
 
 struct offsets_t

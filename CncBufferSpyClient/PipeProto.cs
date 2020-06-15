@@ -2,47 +2,48 @@
 
 namespace CncBufferSpyClient {
 
-	public enum pipe_msg_type : uint {
-		frame_available,
-		frame_request
+	public enum PipeMessageType : uint {
+		FrameAvailable,
+		FrameRequest
 	}
 
-	public enum pipe_buffer : uint {
-		buffer1,
-		buffer2
+	public enum PipeBuffer : uint {
+		Buffer1,
+		Buffer2
 	}
 
-	public struct pipe_request {
-		public pipe_buffer buffer;
+	public struct PipeRequest {
+		public PipeBuffer buffer;
+		public BufferType type;
 	}
 
-	public enum buffer_type : uint {
-		depth,
-		shadow,
-		shroud
+	public enum BufferType : uint {
+		Depth,
+		Shadow,
+		Shroud
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 4)]
-	public struct pipe_frame {
-		public uint reso_h;
-		public uint reso_v;
-		public buffer_type type;
+	public struct PipeFrame {
+		public uint Width;
+		public uint Height;
+		public BufferType type;
 		public uint framenr;
-		public pipe_buffer buffer;
+		public PipeBuffer buffer;
 		public uint frame_memory_start;
 		public uint anchor_offset;
 	};
 
 	[StructLayout(LayoutKind.Explicit, Pack = 4)]
-	public struct pipe_msg {
+	public struct PipeMessage {
 		[FieldOffset(0)]
-		public pipe_msg_type msg_type;
+		public PipeMessageType MessageType;
 
 		[FieldOffset(4)]
-		public pipe_request request;
+		public PipeRequest request;
 
 		[FieldOffset(4)]
-		public pipe_frame frame;
+		public PipeFrame frame;
 	};
 
 }
