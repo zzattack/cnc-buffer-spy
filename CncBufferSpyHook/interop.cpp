@@ -47,11 +47,18 @@ __declspec(dllexport) bool InjectToRunningProcess(const char* processName)
 	pe32.dwSize = sizeof(PROCESSENTRY32);
 	HANDLE hTool32 = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, NULL);
 	BOOL bProcess = Process32First(hTool32, &pe32);
+
+    std::filesystem::path pth(processName);
+    std::string search = pth.filename().string();
+    std::transform(search.begin(), search.end(), search.begin(), [](unsigned char c) { return std::tolower(c); });
+
 	if (bProcess == TRUE)
 	{
 		while (Process32Next(hTool32, &pe32))
 		{
-			if (processName == std::string(pe32.szExeFile))
+            std::string match(pe32.szExeFile);
+            std::transform(match.begin(), match.end(), match.begin(), [](unsigned char c) { return std::tolower(c); });
+			if (search == match)
 			{
 				HANDLE hProcess = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION |
 					PROCESS_VM_WRITE, FALSE, pe32.th32ProcessID);
@@ -63,6 +70,7 @@ __declspec(dllexport) bool InjectToRunningProcess(const char* processName)
 				CreateRemoteThread(hProcess, NULL, NULL, (LPTHREAD_START_ROUTINE)LoadLibraryAddr,
 					LLParam, NULL, NULL);
 				CloseHandle(hProcess);
+                return true;
 			}
 		}
 	}

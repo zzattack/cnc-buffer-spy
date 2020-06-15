@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO.MemoryMappedFiles;
@@ -21,16 +22,16 @@ namespace CncBufferSpyClient {
 		private object mapViewLock = new object();
 		CancellationTokenSource _ctsPipeClient = new CancellationTokenSource();
 		private PipeFrame _lastFrame;
-		private PipeBuffer _lastBuffer;
+		private DestinationBuffer _lastBuffer;
 		private Bitmap _buffer1;
 		private Bitmap _buffer2;
 		private Size _buffersSize; // for cross-thread access
-		private BufferType _bufferRequestType; // for cross-thread access
+		private SurfaceType _surfaceRequestType; // for cross-thread access
 
 
 		public MainForm() {
 			InitializeComponent();
-			cbBufferType.DataSource = Enum.GetNames(typeof(BufferType));
+			cbBufferType.DataSource = Enum.GetNames(typeof(SurfaceType));
 		}
 
 		private void buttonLaunch_Click(object sender, EventArgs e) {
@@ -43,7 +44,7 @@ namespace CncBufferSpyClient {
 		}
 
 		private void btnInject_Click(object sender, EventArgs e) {
-			if (Interop.InjectToRunningProcess("game.exe")) {
+			if (Interop.InjectToRunningProcess(tbExecutablePath.Text)) {
 				Log("Injected successfully\r\n");
 				OpenPipeStream();
 			}
@@ -94,14 +95,22 @@ namespace CncBufferSpyClient {
 
 		private void HandleMessage(PipeMessage message) {
 			if (message.MessageType == PipeMessageType.FrameAvailable) {
-				canvas.Image = ImageFromMappedFileView(message.frame);
-				_lastBuffer = message.frame.buffer;
+				var img = ImageFromMappedFileView(message.frame);
+				lock (canvas.ImageLock)
+					canvas.Image = img;
+				_lastBuffer = message.frame.DestBuffer;
 
 				if (cbAutoRefresh.Checked)
 					// request next image in alternating buffer
-					RequestFrame(message.frame.buffer == PipeBuffer.Buffer1 ? PipeBuffer.Buffer2 : PipeBuffer.Buffer1, false);
+					RequestFrame(message.frame.DestBuffer == DestinationBuffer.Buffer1 ? DestinationBuffer.Buffer2 : DestinationBuffer.Buffer1, false);
 				else
-					Log($"Received frame #{message.frame.framenr} of size {message.frame.Width}x{message.frame.Height} in buffer {(int)message.frame.buffer}\r\n");
+					Log($"Received frame #{message.frame.FrameNumber} of size {message.frame.Width}x{message.frame.Height} in buffer {(int)message.frame.DestBuffer}\r\n");
+			}
+			else if (message.MessageType == PipeMessageType.FrameRequestFailed) {
+				BeginInvoke((Action)delegate {
+					Log("Outstanding request failed, disabling auto-refresh");
+					cbAutoRefresh.Checked = false;
+				});
 			}
 		}
 
@@ -109,37 +118,75 @@ namespace CncBufferSpyClient {
 			if (!EnsureBuffersCompatible(frame))
 				return null;
 
-			var view = frame.buffer == PipeBuffer.Buffer1 ? _mapView1 : _mapView2;
-			var bm = frame.buffer == PipeBuffer.Buffer1 ? _buffer1 : _buffer2;
+			var view = frame.DestBuffer == DestinationBuffer.Buffer1 ? _mapView1 : _mapView2;
+			var bm = frame.DestBuffer == DestinationBuffer.Buffer1 ? _buffer1 : _buffer2;
+			Debug.Assert(bm != canvas.Image);
 
 			byte* ptr = null;
 			view.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
 			var bmd = bm.LockBits(new Rectangle(0, 0, bm.Width, bm.Height), ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
-
-			// determine range
-			ushort* p = (ushort*)ptr;
-			ushort min = 65535;
-			ushort max = 0;
-			ushort* end = p + frame.Width * frame.Height;
-			while (p != end) {
-				if (min > *p) min = *p;
-				if (max < *p) max = *p;
-				++p;
-			}
-			float range = max - min;
-
+			
 			bool jet = ckbJetColormap.Checked;
-			int anchor_x = (int)((frame.anchor_offset/2) % frame.Width);
-			int anchor_y = (int)((frame.anchor_offset/2) / frame.Width);
+			int anchor_x = (int)((frame.SourceBufferAnchor/2) % frame.Width);
+			int anchor_y = (int)((frame.SourceBufferAnchor/2) / frame.Width);
+
+			bool dump = false;
+			if (frame.BytesPerPixel == 2)
+				Blit16bpp(frame, ptr, bmd, anchor_y, anchor_x, jet);
+			else if (frame.BytesPerPixel == 1)
+				Blit8bpp(frame, ptr, bmd, anchor_x, anchor_y);
+
+			view.SafeMemoryMappedViewHandle.ReleasePointer();
+			bm.UnlockBits(bmd);
+			
+			lock (mapViewLock)
+				_mapViewOfShownImage = view;
+			_lastFrame = frame;
+
+			return bm;
+		}
+
+		private unsafe void Blit8bpp(PipeFrame frame, byte* ptr, BitmapData bmd, int anchorX, int anchorY) {
 			for (int row = 0; row < bmd.Height; row++) {
 				byte* w = (byte*)bmd.Scan0.ToPointer() + row * bmd.Stride;
-				byte* scan = ptr + 2 * ((row + anchor_y) % frame.Height) * frame.Width;
+				byte* r = ptr + ((row + anchorY) % frame.Height) * frame.Width;
+				int endCol = (int) ((anchorX + frame.Width - 1) % frame.Width);
+				for (int col = anchorX; col != endCol;) {
+					// low byte
+					*w++ = r[col];
+					*w++ = r[col];
+					*w++ = r[col];
 
-				int endCol = (int)((anchor_x + frame.Width - 1) % frame.Width);
-				for (int col = anchor_x; col != endCol;) {
+					col++;
+					if (col == frame.Width) col = 0;
+				}
+			}
+		}
 
+		private static unsafe void Blit16bpp(PipeFrame frame, byte* ptr, BitmapData bmd, int anchorY, int anchorX, bool jet) {
+			// determine range
+			ushort* p = (ushort*) ptr;
+			ushort min = 65535;
+			ushort max = 0;
+			if (jet) {
+				ushort* end = p + frame.Width * frame.Height;
+				while (p != end) {
+					if (min > *p) min = *p;
+					if (max < *p) max = *p;
+					++p;
+				}
+			}
+
+			float range = max - min;
+
+			for (int row = 0; row < bmd.Height; row++) {
+				byte* w = (byte*) bmd.Scan0.ToPointer() + row * bmd.Stride;
+				byte* scan = ptr + 2 * ((row + anchorY) % frame.Height) * frame.Width;
+
+				int endCol = (int) ((anchorX + frame.Width - 1) % frame.Width);
+				for (int col = anchorX; col != endCol;) {
 					if (jet) {
-						ushort u = (ushort)((scan[col * 2 + 1] << 8) | scan[col * 2]);
+						ushort u = (ushort) ((scan[col * 2 + 1] << 8) | scan[col * 2]);
 						float v = 2 * (u - min) / range;
 						byte b = (byte) Math.Max(0, 255 * (1 - v));
 						byte r = (byte) Math.Max(0, 255 * (v - 1));
@@ -159,15 +206,6 @@ namespace CncBufferSpyClient {
 					if (col == frame.Width) col = 0;
 				}
 			}
-
-			view.SafeMemoryMappedViewHandle.ReleasePointer();
-			bm.UnlockBits(bmd);
-
-			lock (mapViewLock)
-				_mapViewOfShownImage = view;
-			_lastFrame = frame;
-
-			return bm;
 		}
 
 		private bool EnsureBuffersCompatible(PipeFrame frame) {
@@ -179,11 +217,12 @@ namespace CncBufferSpyClient {
 			}
 
 			try {
+				lock (canvas.ImageLock)
+					canvas.Image = null;
 				_mapView1?.Dispose();
 				_mapView2?.Dispose();
 				_mappedFile1?.Dispose();
 				_mappedFile2?.Dispose();
-				canvas.Image = null;
 				_buffer1?.Dispose();
 				_buffer2?.Dispose();
 
@@ -204,10 +243,10 @@ namespace CncBufferSpyClient {
 		}
 
 		private void btnRequestFrame_Click(object sender, EventArgs e) {
-			RequestFrame(_lastBuffer == PipeBuffer.Buffer1 ? PipeBuffer.Buffer2 : PipeBuffer.Buffer1, true); // always alternate buffers
+			RequestFrame(_lastBuffer == DestinationBuffer.Buffer1 ? DestinationBuffer.Buffer2 : DestinationBuffer.Buffer1, true); // always alternate buffers
 		}
 
-		private async void RequestFrame(PipeBuffer buffer, bool log) {
+		private async void RequestFrame(DestinationBuffer buffer, bool log) {
 			if (_pipeClient == null) {
 				Log("No pipe to write to!");
 				return;
@@ -217,7 +256,8 @@ namespace CncBufferSpyClient {
 			var msg = new PipeMessage();
 			msg.MessageType = PipeMessageType.FrameRequest;
 			msg.request = new PipeRequest();
-			msg.request.buffer = buffer;
+			msg.request.DestinationBuffer = buffer;
+			msg.request.SurfaceType = _surfaceRequestType;
 
 			// convert to payload
 			int size = Marshal.SizeOf(msg);
@@ -234,7 +274,7 @@ namespace CncBufferSpyClient {
 
 		private void cbAutoRefresh_CheckedChanged(object sender, EventArgs e) {
 			if (cbAutoRefresh.Checked)
-				RequestFrame(_lastBuffer == PipeBuffer.Buffer1 ? PipeBuffer.Buffer2 : PipeBuffer.Buffer1, false);
+				RequestFrame(_lastBuffer == DestinationBuffer.Buffer1 ? DestinationBuffer.Buffer2 : DestinationBuffer.Buffer1, false);
 		}
 
 		private void MainForm_FormClosing(object sender, FormClosingEventArgs e) {
@@ -251,7 +291,7 @@ namespace CncBufferSpyClient {
 		private unsafe void canvas_MouseMove(object sender, MouseEventArgs e) {
 			// prerequisites check
 			Point location;
-			ushort bufValue;
+			ushort bufValue = 0x5A5A;
 			lock (mapViewLock) {
 				if (_mapViewOfShownImage == null || canvas.Image == null)
 					return;
@@ -266,15 +306,16 @@ namespace CncBufferSpyClient {
 				byte* ptr = null;
 				_mapViewOfShownImage.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
 				int idx = location.X + location.Y * _buffersSize.Width;
-				ptr += idx * 2;
-				bufValue = (ushort)((*(ptr+1) << 8) | *(ptr+0));
+				ptr += idx * _lastFrame.BytesPerPixel;
+				if (_lastFrame.BytesPerPixel == 2)
+					bufValue = (ushort)((*(ptr+1) << 8) | *(ptr+0));
+				else if (_lastFrame.BytesPerPixel == 1)
+					bufValue = *ptr;
 			}
 
 			StringBuilder sb = new StringBuilder();
 			sb.AppendFormat("Mouse: ({0},{1}) ", location.X, location.Y);
-			sb.AppendFormat(" -- depth value:  {0} / 0x{0:X4}", bufValue);
-			//uint offset = (uint)(2 * (location.X + location.Y * _lastFrame.reso_h));
-			//sb.AppendFormat(" -- address: 0x{0:X8}, offset: 0x{1:X8}, offset/2: {2:X8}", _lastFrame.frame_memory_start + offset, offset, offset / 2);
+			sb.AppendFormat(" -- buffer value:  {0} / 0x{0:X4}", bufValue);
 			toolStripLabel.Text = sb.ToString();
 		}
 
@@ -293,7 +334,16 @@ namespace CncBufferSpyClient {
 		}
 
 		private void cbBufferType_SelectedIndexChanged(object sender, EventArgs e) {
-			_bufferRequestType = (BufferType)cbBufferType.SelectedIndex;
+			// release outstanding buffer handles as after request
+			// these can be released by hook DLL
+			lock (mapViewLock) {
+				_mapViewOfShownImage = null;
+				_mapView1?.Dispose();
+				_mapView2?.Dispose();
+				_mapView1 = _mapView2 = null;
+			}
+
+			_surfaceRequestType = (SurfaceType)cbBufferType.SelectedIndex;
 		}
 	}
 }

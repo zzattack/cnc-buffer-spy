@@ -36,6 +36,8 @@
 			this.toolStripLabel = new System.Windows.Forms.ToolStripStatusLabel();
 			this.tbLog = new System.Windows.Forms.TextBox();
 			this.ckbJetColormap = new System.Windows.Forms.CheckBox();
+			this.cbBufferType = new System.Windows.Forms.ComboBox();
+			this.lblBufferType = new System.Windows.Forms.Label();
 			this.canvas = new CncBufferSpyClient.ZoomableCanvas();
 			this.statusStrip.SuspendLayout();
 			this.SuspendLayout();
@@ -78,7 +80,7 @@
 			this.tbExecutablePath.Name = "tbExecutablePath";
 			this.tbExecutablePath.Size = new System.Drawing.Size(258, 20);
 			this.tbExecutablePath.TabIndex = 5;
-			this.tbExecutablePath.Text = "C:\\Westwood\\TS\\game.exe";
+			this.tbExecutablePath.Text = "C:\\Westwood\\RA2\\gamemd.exe";
 			// 
 			// btnConnect
 			// 
@@ -154,6 +156,24 @@
 			this.ckbJetColormap.Text = "Jet colormap";
 			this.ckbJetColormap.UseVisualStyleBackColor = true;
 			// 
+			// cbBufferType
+			// 
+			this.cbBufferType.FormattingEnabled = true;
+			this.cbBufferType.Location = new System.Drawing.Point(829, 17);
+			this.cbBufferType.Name = "cbBufferType";
+			this.cbBufferType.Size = new System.Drawing.Size(121, 21);
+			this.cbBufferType.TabIndex = 11;
+			this.cbBufferType.SelectedIndexChanged += new System.EventHandler(this.cbBufferType_SelectedIndexChanged);
+			// 
+			// lblBufferType
+			// 
+			this.lblBufferType.AutoSize = true;
+			this.lblBufferType.Location = new System.Drawing.Point(788, 20);
+			this.lblBufferType.Name = "lblBufferType";
+			this.lblBufferType.Size = new System.Drawing.Size(33, 13);
+			this.lblBufferType.TabIndex = 12;
+			this.lblBufferType.Text = "Layer";
+			// 
 			// canvas
 			// 
 			this.canvas.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
@@ -174,6 +194,8 @@
 			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
 			this.ClientSize = new System.Drawing.Size(1077, 804);
+			this.Controls.Add(this.lblBufferType);
+			this.Controls.Add(this.cbBufferType);
 			this.Controls.Add(this.ckbJetColormap);
 			this.Controls.Add(this.tbLog);
 			this.Controls.Add(this.statusStrip);
@@ -212,6 +234,8 @@
 		private System.Windows.Forms.ToolStripStatusLabel toolStripLabel;
 		private System.Windows.Forms.TextBox tbLog;
 		private System.Windows.Forms.CheckBox ckbJetColormap;
+		private System.Windows.Forms.ComboBox cbBufferType;
+		private System.Windows.Forms.Label lblBufferType;
 	}
 }
 

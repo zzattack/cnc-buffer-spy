@@ -5,7 +5,7 @@
 #include "pipeserver.h"
 #include <windows.h>
 #include "detours.h"
-
+#include "ddraw.h"
 
 HINSTANCE sInstanceHandle;
 bool sIsHookedInstance = false;
@@ -14,70 +14,87 @@ HANDLE hMap1 = NULL, hMap2 = NULL;
 unsigned int mapFileSize = 0;
 void* pMapBuf1 = NULL, * pMapBuf2 = NULL;
 bool tsHooked = false, ra2Hooked = false, yrHooked = false;
-std::atomic<pipe_request*> open_request;
-std::atomic<pipe_frame*> open_frame;
+std::atomic<PipeRequest*> open_request;
+std::atomic<PipeFrame*> open_frame;
+
+bool EnsureBufferFits(uint32_t size);
+bool EnsureBuffersCompatible(DSurface* surface);
+bool EnsureBuffersCompatible(ZBuffer* buffer);
+bool EnsureBuffersCompatible(IDirectDrawSurface* ddrawSurface, LPDDSURFACEDESC surfaceDesc);
+DSurface** getSurfacePointer(OffsetCollection* offsets, BufferType type);
+ZBuffer** getZBufferPointer(OffsetCollection* offsets, BufferType type);
 
 
-bool EnsureBuffersCompatible(buffers_base_t* buffer)
-{
-    // Create file mappings for 2 buffers
-    DWORD bufferSize = buffer->width * buffer->height * 2;
-
-    if (0 < bufferSize && bufferSize < 8192*8192*2 && (!hMap1 || !hMap2 || !pMapBuf1 || !pMapBuf2 || mapFileSize != bufferSize))
-    {
-        if (pMapBuf1 != nullptr) UnmapViewOfFile(pMapBuf1);
-        if (pMapBuf2 != nullptr) UnmapViewOfFile(pMapBuf2);
-        if (hMap1 != nullptr) CloseHandle(hMap1);
-        if (hMap2 != nullptr) CloseHandle(hMap2);
-
-        hMap1 = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, bufferSize, "cnc_buffer_spy1");
-        hMap2 = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, bufferSize, "cnc_buffer_spy2");
-
-        if (hMap1 && hMap2) {
-            mapFileSize = bufferSize;
-
-            pMapBuf1 = MapViewOfFile(hMap1, FILE_MAP_WRITE, 0, 0, mapFileSize);
-            pMapBuf2 = MapViewOfFile(hMap2, FILE_MAP_WRITE, 0, 0, mapFileSize);
-        
-            if (!pMapBuf1 || !pMapBuf2)
-                MessageBox(NULL, "Could not obtain map view", "Error", 0);
-        }
-        else
-            MessageBox(NULL, "Could not allocate map space", "Error", 0);
-    }
-
-    return hMap1 && hMap2 && pMapBuf1 && pMapBuf2 && mapFileSize == bufferSize;
-}
-
-
-int __cdecl GameLoopSpy(offsets_t* offsets) {
+int __cdecl GameLoopSpy(OffsetCollection* offsets) {
 
     int ret = offsets->game_loop();
 
     // copy depth buffer into mapped area
-    pipe_request* req = open_request.exchange(nullptr);
+    PipeRequest* req = open_request.exchange(nullptr);
     if (req)
     {
-        if (EnsureBuffersCompatible(*offsets->depth_buffer)) {
+        bool requestHandled = false;
+
+        if (auto surface = getSurfacePointer(offsets, req->bufferType); surface != nullptr && *surface != nullptr) {
+            if (EnsureBuffersCompatible(*surface)){
+                // copy current depth buffer into open_request's frame
+                if (req->buffer == DestinationBuffer::Buffer1)
+                    memcpy(pMapBuf1, (*surface)->Buffer, mapFileSize);
+                else if (req->buffer == DestinationBuffer::Buffer2)
+                    memcpy(pMapBuf2, (*surface)->Buffer, mapFileSize);
+
+                // nudge pipe server that request is filled
+                PipeMessage msg{ .messageType = PipeMessageType::FrameAvailable };
+                msg.frame.frameNumber = *offsets->game_frame;
+                msg.frame.width = (*surface)->xs.s.Width;
+                msg.frame.height = (*surface)->xs.s.Height;
+                msg.frame.bufferType = req->bufferType;
+                msg.frame.destinationBuffer = req->buffer;
+                msg.frame.sourceBuffer = (*surface)->Buffer;
+                msg.frame.sourceAnchor = 0;
+                msg.frame.bytesPerPixel = (*surface)->xs.BytesPerPixel;
+                std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
+                pipeServer.writeToPipe(v);
+                requestHandled = true;
+            }
+            
+            else if (EnsureBuffersCompatible((*surface)->DDrawSurface, nullptr))
+            {
+                // todo: lock ddraw surface, copy to mapped file
+            }
+
+        }
+
+        else if (auto zbuf = getZBufferPointer(offsets, req->bufferType); zbuf && *zbuf && EnsureBuffersCompatible(*zbuf)) {
             // copy current depth buffer into open_request's frame
-            if (req->buffer == pipe_buffer::buffer1)
-                memcpy(pMapBuf1, (*offsets->depth_buffer)->buffer, mapFileSize);
-            else if (req->buffer == pipe_buffer::buffer2)
-                memcpy(pMapBuf2, (*offsets->depth_buffer)->buffer, mapFileSize);
+            if (req->buffer == DestinationBuffer::Buffer1)
+                memcpy(pMapBuf1, (*zbuf)->data, mapFileSize);
+            else if (req->buffer == DestinationBuffer::Buffer2)
+                memcpy(pMapBuf2, (*zbuf)->data, mapFileSize);
 
             // nudge pipe server that request is filled
-            pipe_msg msg;
-            msg.msg_type = pipe_msg_type::frame_available;
-            msg.frame.framenr = *offsets->game_frame;
-            msg.frame.reso_h = (*offsets->depth_buffer)->width;
-            msg.frame.reso_v = (*offsets->depth_buffer)->height;
-            msg.frame.type = frame_type::depth;
-            msg.frame.buffer = req->buffer;
-            msg.frame.frame_memory_start = (uint32_t)(*offsets->depth_buffer)->buffer;
-            msg.frame.anchor_offset = (uint32_t)(*offsets->depth_buffer)->buffer_start;
+            PipeMessage msg { .messageType = PipeMessageType::FrameAvailable };
+            msg.frame.frameNumber = *offsets->game_frame;
+            msg.frame.width = (*zbuf)->width;
+            msg.frame.height = (*zbuf)->height;
+            msg.frame.bufferType = req->bufferType;
+            msg.frame.destinationBuffer = req->buffer;
+            msg.frame.sourceBuffer = (*zbuf)->data;
+            msg.frame.sourceAnchor = (*zbuf)->buffer_anchor;
+            msg.frame.bytesPerPixel = 2;
+            std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
+            pipeServer.writeToPipe(v);
+            requestHandled = true;
+        }
+
+        if (!requestHandled)
+        {
+            // negative acknowledge
+            PipeMessage msg { .messageType = PipeMessageType::FrameRequestFailed };
             std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
             pipeServer.writeToPipe(v);
         }
+
         delete req;
     }
 
@@ -86,16 +103,98 @@ int __cdecl GameLoopSpy(offsets_t* offsets) {
 
 int __cdecl GameLoopRA2()
 {
-    return GameLoopSpy(&ra2_offsets);
+    return GameLoopSpy(&OffsetsRA2);
 }
 int __cdecl GameLoopYR()
 {
-    return GameLoopSpy(&yr_offsets);
+    return GameLoopSpy(&OffsetsYR);
 }
 int __cdecl GameLoopTS()
 {
-    return GameLoopSpy(&ts_offsets);
+    return GameLoopSpy(&OffsetsTS);
 }
+
+bool EnsureBuffersCompatible(DSurface* surface)
+{
+    if (surface == nullptr || surface->Buffer == nullptr)
+        return false;
+
+    // Create file mappings for 2 buffers
+    uint32_t size = surface->xs.s.Width * surface->xs.s.Height * surface->xs.BytesPerPixel;
+    return EnsureBufferFits(size);
+}
+
+bool EnsureBuffersCompatible(IDirectDrawSurface* ddrawSurface, LPDDSURFACEDESC surfaceDesc)
+{
+    // TODO: figure out pixel format/buffer dimensinos of surface
+    return false;
+}
+
+bool EnsureBuffersCompatible(ZBuffer* buffer)
+{
+    if (buffer == nullptr || buffer->data == nullptr)
+        return false;
+
+    // Create file mappings for 2 buffers
+    return EnsureBufferFits(buffer->size);
+}
+
+bool EnsureBufferFits(uint32_t size) {
+    if (size > 8192 * 8192 * 4)
+        return false; // unrealistic size requested
+
+    if (!hMap1 || !hMap2 || !pMapBuf1 || !pMapBuf2 || mapFileSize != size)
+    {
+        if (pMapBuf1 != nullptr) UnmapViewOfFile(pMapBuf1);
+        if (pMapBuf2 != nullptr) UnmapViewOfFile(pMapBuf2);
+        if (hMap1 != nullptr) CloseHandle(hMap1);
+        if (hMap2 != nullptr) CloseHandle(hMap2);
+
+        hMap1 = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, size, "cnc_buffer_spy1");
+        hMap2 = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, size, "cnc_buffer_spy2");
+
+        if (hMap1 && hMap2) {
+            mapFileSize = size;
+
+            pMapBuf1 = MapViewOfFile(hMap1, FILE_MAP_ALL_ACCESS, 0, 0, mapFileSize);
+            pMapBuf2 = MapViewOfFile(hMap2, FILE_MAP_ALL_ACCESS, 0, 0, mapFileSize);
+
+            if (!pMapBuf1 || !pMapBuf2)
+                MessageBox(NULL, "Could not obtain map view", "Error", 0);
+        }
+        else
+            MessageBox(NULL, "Could not allocate map space", "Error", 0);
+    }
+
+    return hMap1 && hMap2 && pMapBuf1 && pMapBuf2 && mapFileSize == size;
+}
+
+
+DSurface** getSurfacePointer(OffsetCollection* offsets, BufferType type)
+{
+    switch (type)
+    {
+        case BufferType::SurfaceTile: return offsets->tiles;
+        case BufferType::SurfacePrimary: return offsets->primary;
+        case BufferType::SurfaceSidebar: return offsets->sidebar;
+        case BufferType::SurfaceHidden: return offsets->hidden;
+        case BufferType::SurfaceAlternative: return offsets->alt;
+        case BufferType::SurfaceTemp: return offsets->temp;
+        case BufferType::SurfaceComposite: return offsets->composite;
+        case BufferType::SurfaceCloak: return offsets->cloak;
+        default: return nullptr;
+    }
+}
+
+ZBuffer** getZBufferPointer(OffsetCollection* offsets, BufferType type)
+{
+    switch (type)
+    {
+        case BufferType::DepthBuffer: return offsets->depth_buffer;
+        default: return nullptr;
+    }
+}
+
 
 void Log(const char* format, ...)
 {
@@ -117,12 +216,12 @@ void OnDataReceived(std::vector<unsigned char> data)
 
     // let's just deal with this data as if it always contains a full frame.
     // ideally we'd wrap it around a protocol interpreter that allows buffering.
-    if (data.size() == sizeof(pipe_msg))
+    if (data.size() == sizeof(PipeMessage))
     {
-        const pipe_msg* msg = (pipe_msg*)&data[0];
-        if (msg->msg_type == pipe_msg_type::frame_request)
+        const PipeMessage* msg = (PipeMessage*)&data[0];
+        if (msg->messageType == PipeMessageType::FrameRequest)
         {
-            auto req = new pipe_request;
+            auto req = new PipeRequest;
             *req = msg->request;
             auto pending = open_request.exchange(req);
             if (pending) delete pending; // we've overwritten an outstanding request, so delete it
@@ -133,7 +232,7 @@ void OnDataReceived(std::vector<unsigned char> data)
 
 /*  Uncomment if you want to track memory allocations.
  *  Useful for finding buffers of which the (estimated) size is known.
-
+ 
 #include <vector>
 #include <map>
 std::vector<void*> allocs;
@@ -158,14 +257,15 @@ BOOL WINAPI Mine_HeapFree(HANDLE hHeap, DWORD dwFlags, LPVOID lpMem)
 }
 */
 
-
 bool APIENTRY DllMain(HINSTANCE hInstance, DWORD dwReason, void* lpReserved)
 {
-    sInstanceHandle = hInstance;
+    if (DetourIsHelperProcess()) 
+        return true;
 
+    sInstanceHandle = hInstance;
     char fn[MAX_PATH];
     GetModuleFileName(NULL, fn, MAX_PATH);
-    if (strstr(fn, "SpyClient") || DetourIsHelperProcess()) {
+    if (strstr(fn, "SpyClient")) {
         sIsHookedInstance = false;
         return true;
     }
@@ -176,7 +276,6 @@ bool APIENTRY DllMain(HINSTANCE hInstance, DWORD dwReason, void* lpReserved)
             DisableThreadLibraryCalls(sInstanceHandle);
 
             bool hookSuccess = true;
-
             /*DetourTransactionBegin();
             DetourUpdateThread(GetCurrentThread());
             DetourAttach(&(PVOID&)Real_HeapAlloc, Mine_HeapAlloc);
@@ -186,24 +285,24 @@ bool APIENTRY DllMain(HINSTANCE hInstance, DWORD dwReason, void* lpReserved)
             DetourAttach(&(PVOID&)Real_HeapFree, Mine_HeapFree);
             hookSuccess &= DetourTransactionCommit() == NO_ERROR;*/
 
-            if (*ra2_offsets.sku == 0x2100 /*&& *ra2_offsets.version == 0x10006*/) {
+            if (*OffsetsRA2.sku == 0x2100 /*&& *ra2_offsets.version == 0x10006*/) {
                 DetourTransactionBegin();
                 DetourUpdateThread(GetCurrentThread());
-                DetourAttach(&(PVOID&)ra2_offsets.game_loop, GameLoopRA2);
+                DetourAttach(&(PVOID&)OffsetsRA2.game_loop, GameLoopRA2);
                 hookSuccess &= DetourTransactionCommit() == NO_ERROR;
                 ra2Hooked = true;
             }
-            else if (*yr_offsets.sku == 0x2900 /*&& *yr_offsets.version == 0x10001*/) {
+            else if (*OffsetsYR.sku == 0x2900 /*&& *yr_offsets.version == 0x10001*/) {
                 DetourTransactionBegin();
                 DetourUpdateThread(GetCurrentThread());
-                DetourAttach(&(PVOID&)yr_offsets.game_loop, GameLoopYR);
+                DetourAttach(&(PVOID&)OffsetsYR.game_loop, GameLoopYR);
                 hookSuccess &= DetourTransactionCommit() == NO_ERROR;
                 yrHooked = true;
             }
-            else if (*ts_offsets.sku == 0x1200 && *ts_offsets.version == 0x20003) {
+            else if (*OffsetsTS.sku == 0x1200 && *OffsetsTS.version == 0x20003) {
                 DetourTransactionBegin();
                 DetourUpdateThread(GetCurrentThread());
-                DetourAttach(&(PVOID&)ts_offsets.game_loop, GameLoopTS);
+                DetourAttach(&(PVOID&)OffsetsTS.game_loop, GameLoopTS);
                 hookSuccess &= DetourTransactionCommit() == NO_ERROR;
                 tsHooked = true;
             }
@@ -228,11 +327,11 @@ bool APIENTRY DllMain(HINSTANCE hInstance, DWORD dwReason, void* lpReserved)
             // DetourDetach(&(PVOID&)Real_HeapFree, Mine_HeapFree);
 
             if (ra2Hooked)
-                DetourDetach(&(PVOID&)ra2_offsets.game_loop, GameLoopRA2);
+                DetourDetach(&(PVOID&)OffsetsRA2.game_loop, GameLoopRA2);
             if (yrHooked)
-                DetourDetach(&(PVOID&)yr_offsets.game_loop, GameLoopYR);
+                DetourDetach(&(PVOID&)OffsetsYR.game_loop, GameLoopYR);
             if (tsHooked)
-                DetourDetach(&(PVOID&)ts_offsets.game_loop, GameLoopTS);
+                DetourDetach(&(PVOID&)OffsetsTS.game_loop, GameLoopTS);
 
             DetourTransactionCommit();
 

@@ -45,13 +45,15 @@ namespace CncBufferSpyClient {
 				Invalidate();
 			}
 		}
-		public Size ImageSize => VirtualMode ? VirtualSize : Image?.Size ?? Size.Empty;
+		public Size ImageSize => VirtualMode ? VirtualSize : _imageSize;
 
 		private Image _image;
+		private Size _imageSize;
 		public Image Image {
 			get => _image;
 			set {
 				_image = value;
+				_imageSize = value?.Size ?? Size.Empty;
 				if (!_virtualMode) {
 					Invalidate();
 				}
@@ -59,6 +61,8 @@ namespace CncBufferSpyClient {
 		}
 
 		public float ZoomFactor => (float)Math.Pow(_zoomMultiplier, _zoomStep);
+
+		public object ImageLock { get; } = new object();
 		#endregion
 
 		#region events
@@ -87,9 +91,11 @@ namespace CncBufferSpyClient {
 			if (VirtualMode) {
 				OnVirtualDraw(e);
 			}
-			else if (Image != null) {
-				e.Graphics.DrawImage(Image, ClientRectangle,
-					Rectangle.Round(ScaleRectangle(ClientRectangle)), GraphicsUnit.Pixel);
+			else {
+				lock (ImageLock) {
+					if (Image != null)
+						e.Graphics.DrawImage(Image, ClientRectangle, Rectangle.Round(ScaleRectangle(ClientRectangle)), GraphicsUnit.Pixel);
+				}
 			}
 
 			if (_zoomSizing) {
