@@ -29,6 +29,7 @@
     <None Include="exports.def">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="main.h">

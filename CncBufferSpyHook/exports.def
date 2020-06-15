@@ -1,4 +1,4 @@
-LIBRARY     Ra2DepthBufferSpyHook.dll
+LIBRARY     CncBufferSpyHook.dll
 
 EXPORTS
 	StartProcess
