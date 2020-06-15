@@ -1,49 +1,59 @@
 #pragma once
 #include <cstdint>
 
-enum class pipe_msg_type : uint32_t
+enum class PipeMessageType : uint32_t
 {
-    frame_available,
-    frame_request
+    FrameAvailable,
+    FrameRequest,
+    FrameRequestFailed,
 };
 
-enum class pipe_buffer : uint32_t
+enum class DestinationBuffer : uint32_t
 {
-    buffer1,
-    buffer2
+    Buffer1,
+    Buffer2
 };
 
-struct pipe_request
+enum class BufferType : uint32_t
+{
+    DepthBuffer,
+    ShroudBuffer,
+    SurfaceTile,
+    SurfacePrimary,
+    SurfaceSidebar,
+    SurfaceHidden,
+    SurfaceAlternative,
+    SurfaceTemp,
+    SurfaceComposite,
+    SurfaceCloak
+};
+
+struct PipeRequest
 {
     // named event to signal when data available
-    pipe_buffer buffer;
+    DestinationBuffer buffer;
+    BufferType bufferType;
 };
 
-enum class frame_type : uint32_t
+struct PipeFrame
 {
-    depth,
-    shadow,
-    shroud
+    uint32_t width;
+    uint32_t height;
+    uint32_t bytesPerPixel;
+    BufferType bufferType;
+    uint32_t frameNumber;
+    uint16_t* sourceBuffer;
+    uint16_t* sourceAnchor;
+    DestinationBuffer destinationBuffer;
 };
 
-struct pipe_frame
+struct PipeMessage
 {
-    uint32_t reso_h;
-    uint32_t reso_v;
-    frame_type type;
-    uint32_t framenr;
-    pipe_buffer buffer;
-    uint32_t frame_memory_start;
-    uint32_t anchor_offset;
-};
-
-struct pipe_msg
-{
-    pipe_msg_type msg_type;
+    PipeMessageType messageType;
 
     union
     {
-        pipe_request request;
-        pipe_frame frame;
+        PipeRequest request;
+        PipeFrame frame;
     };
 };

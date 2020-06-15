@@ -4,34 +4,43 @@ namespace CncBufferSpyClient {
 
 	public enum PipeMessageType : uint {
 		FrameAvailable,
-		FrameRequest
+		FrameRequest,
+		FrameRequestFailed,
 	}
 
-	public enum PipeBuffer : uint {
+	public enum DestinationBuffer : uint {
 		Buffer1,
 		Buffer2
 	}
 
 	public struct PipeRequest {
-		public PipeBuffer buffer;
-		public BufferType type;
+		public DestinationBuffer DestinationBuffer;
+		public SurfaceType SurfaceType;
 	}
 
-	public enum BufferType : uint {
-		Depth,
-		Shadow,
-		Shroud
+	public enum SurfaceType : uint {
+		DepthBuffer,
+		ShroudBuffer,
+		SurfaceTile,
+		SurfacePrimary,
+		SurfaceSidebar,
+		SurfaceHidden,
+		SurfaceAlternative,
+		SurfaceTemp,
+		SurfaceComposite,
+		SurfaceCloak
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 4)]
 	public struct PipeFrame {
 		public uint Width;
 		public uint Height;
-		public BufferType type;
-		public uint framenr;
-		public PipeBuffer buffer;
-		public uint frame_memory_start;
-		public uint anchor_offset;
+		public uint BytesPerPixel;
+		public SurfaceType SurfaceType;
+		public uint FrameNumber;
+		public uint SourceBufferAddress;
+		public uint SourceBufferAnchor;
+		public DestinationBuffer DestBuffer;
 	};
 
 	[StructLayout(LayoutKind.Explicit, Pack = 4)]
