@@ -44,7 +44,8 @@ int __cdecl GameLoopSpy(OffsetCollection* offsets) {
                     memcpy(pMapBuf2, (*surface)->Buffer, mapFileSize);
 
                 // nudge pipe server that request is filled
-                PipeMessage msg{ .messageType = PipeMessageType::FrameAvailable };
+                PipeMessage msg;
+                msg.messageType = PipeMessageType::FrameAvailable;
                 msg.frame.frameNumber = *offsets->game_frame;
                 msg.frame.width = (*surface)->xs.s.Width;
                 msg.frame.height = (*surface)->xs.s.Height;
@@ -72,7 +73,8 @@ int __cdecl GameLoopSpy(OffsetCollection* offsets) {
                         memcpy(pMapBuf2, desc.lpSurface, mapFileSize);
                     (*surface)->DDrawSurface->Unlock(nullptr);
 
-                    PipeMessage msg{ .messageType = PipeMessageType::FrameAvailable };
+                    PipeMessage msg;
+                    msg.messageType = PipeMessageType::FrameAvailable;
                     msg.frame.frameNumber = *offsets->game_frame;
                     msg.frame.width = desc.dwWidth;
                     msg.frame.height = desc.dwHeight;
@@ -98,7 +100,8 @@ int __cdecl GameLoopSpy(OffsetCollection* offsets) {
                 memcpy(pMapBuf2, (*zbuf)->data, mapFileSize);
 
             // nudge pipe server that request is filled
-            PipeMessage msg{ .messageType = PipeMessageType::FrameAvailable };
+            PipeMessage msg;
+            msg.messageType = PipeMessageType::FrameAvailable;
             msg.frame.frameNumber = *offsets->game_frame;
             msg.frame.width = (*zbuf)->width;
             msg.frame.height = (*zbuf)->height;
@@ -116,7 +119,8 @@ int __cdecl GameLoopSpy(OffsetCollection* offsets) {
         if (!requestHandled)
         {
             // negative acknowledge
-            PipeMessage msg{ .messageType = PipeMessageType::FrameRequestFailed };
+            PipeMessage msg;
+            msg.messageType = PipeMessageType::FrameRequestFailed;
             std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
             pipeServer->writeToPipe(v);
         }
@@ -306,6 +310,8 @@ bool APIENTRY DllMain(HINSTANCE hInstance, DWORD dwReason, void* lpReserved)
 
     switch (dwReason) {
         case DLL_PROCESS_ATTACH: {
+            InitOffsets();
+
             DisableThreadLibraryCalls(sInstanceHandle);
 
             bool hookSuccess = true;
