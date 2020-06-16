@@ -16,11 +16,13 @@ namespace CncBufferSpyClient {
 	public struct PipeRequest {
 		public DestinationBuffer DestinationBuffer;
 		public SurfaceType SurfaceType;
+		public uint CustomOffset;
 	}
 
 	public enum SurfaceType : uint {
 		DepthBuffer,
 		ShroudBuffer,
+		AlphaBuffer,
 		SurfaceTile,
 		SurfacePrimary,
 		SurfaceSidebar,
@@ -29,6 +31,9 @@ namespace CncBufferSpyClient {
 		SurfaceTemp,
 		SurfaceComposite,
 		SurfaceCloak,
+		SurfaceVoxel,
+		SurfaceVoxel2,
+		Custom = 0xFFFFFFFE,
 		Invalid = 0xFFFFFFFF
 	}
 

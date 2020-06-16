@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Globalization;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.IO.Pipes;
@@ -32,6 +33,7 @@ namespace CncBufferSpyClient {
 		private Bitmap _buffer2;
 		private Size _buffersSize; // for cross-thread access
 		private SurfaceType _surfaceRequestType = SurfaceType.Invalid;
+		private uint _customRequestOffset;
 		private int failCounter;
 
 
@@ -305,9 +307,15 @@ namespace CncBufferSpyClient {
 		}
 
 		private void btnRequestFrame_Click(object sender, EventArgs e) {
+			_surfaceRequestType = (SurfaceType)cbBufferType.SelectedIndex;
 			RequestFrame(true); // always alternate buffers
 		}
 
+		private void btnRequestCustom_Click(object sender, EventArgs e) {
+			_surfaceRequestType = SurfaceType.Custom;
+			_customRequestOffset = Convert.ToUInt32(tbCustomOffset.Text, 16);
+			RequestFrame(true);
+		}
 		private void RequestFrame(bool log) {
 			if (_pipeClient == null) {
 				Log("No pipe to write to!");
@@ -329,6 +337,7 @@ namespace CncBufferSpyClient {
 				? DestinationBuffer.Buffer2
 				: DestinationBuffer.Buffer1; // alternate
 			msg.request.SurfaceType = _surfaceRequestType;
+			msg.request.CustomOffset = _customRequestOffset;
 
 			// convert to payload
 			int size = Marshal.SizeOf(msg);
@@ -352,8 +361,10 @@ namespace CncBufferSpyClient {
 		}
 
 		private void cbAutoRefresh_CheckedChanged(object sender, EventArgs e) {
-			if (cbAutoRefresh.Checked)
+			if (cbAutoRefresh.Checked) {
+				_surfaceRequestType = (SurfaceType)cbBufferType.SelectedIndex;
 				RequestFrame(false);
+			}
 		}
 
 		private void MainForm_FormClosing(object sender, FormClosingEventArgs e) {
@@ -476,7 +487,5 @@ namespace CncBufferSpyClient {
 			lblConnected.ForeColor = _pipeClient?.CanRead == true ? Color.Green : Color.Red;
 		}
 
-		private void MainForm_Load(object sender, EventArgs e) {
-		}
 	}
 }

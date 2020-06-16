@@ -39,13 +39,13 @@
 			this.lblBufferType = new System.Windows.Forms.Label();
 			this.gbLayers = new System.Windows.Forms.GroupBox();
 			this.gbProcess = new System.Windows.Forms.GroupBox();
-			this.lblRunning = new System.Windows.Forms.Label();
-			this.lblInjected = new System.Windows.Forms.Label();
 			this.lblConnected = new System.Windows.Forms.Label();
+			this.lblInjected = new System.Windows.Forms.Label();
+			this.lblRunning = new System.Windows.Forms.Label();
 			this.gbOffset = new System.Windows.Forms.GroupBox();
+			this.tbCustomOffset = new System.Windows.Forms.TextBox();
 			this.lblOffset = new System.Windows.Forms.Label();
-			this.button1 = new System.Windows.Forms.Button();
-			this.textBox1 = new System.Windows.Forms.TextBox();
+			this.btnRequestCustom = new System.Windows.Forms.Button();
 			this.timer = new System.Windows.Forms.Timer(this.components);
 			this.canvas = new CncBufferSpyClient.ZoomableCanvas();
 			this.statusStrip.SuspendLayout();
@@ -205,14 +205,14 @@
 			this.gbProcess.TabStop = false;
 			this.gbProcess.Text = "Game process";
 			// 
-			// lblRunning
+			// lblConnected
 			// 
-			this.lblRunning.AutoSize = true;
-			this.lblRunning.Location = new System.Drawing.Point(17, 80);
-			this.lblRunning.Name = "lblRunning";
-			this.lblRunning.Size = new System.Drawing.Size(84, 13);
-			this.lblRunning.TabIndex = 7;
-			this.lblRunning.Text = "NOT RUNNING";
+			this.lblConnected.AutoSize = true;
+			this.lblConnected.Location = new System.Drawing.Point(218, 80);
+			this.lblConnected.Name = "lblConnected";
+			this.lblConnected.Size = new System.Drawing.Size(100, 13);
+			this.lblConnected.TabIndex = 9;
+			this.lblConnected.Text = "NOT CONNECTED";
 			// 
 			// lblInjected
 			// 
@@ -223,26 +223,34 @@
 			this.lblInjected.TabIndex = 8;
 			this.lblInjected.Text = "NOT INJECTED";
 			// 
-			// label1
+			// lblRunning
 			// 
-			this.lblConnected.AutoSize = true;
-			this.lblConnected.Location = new System.Drawing.Point(218, 80);
-			this.lblConnected.Name = "lblConnected";
-			this.lblConnected.Size = new System.Drawing.Size(100, 13);
-			this.lblConnected.TabIndex = 9;
-			this.lblConnected.Text = "NOT CONNECTED";
+			this.lblRunning.AutoSize = true;
+			this.lblRunning.Location = new System.Drawing.Point(17, 80);
+			this.lblRunning.Name = "lblRunning";
+			this.lblRunning.Size = new System.Drawing.Size(84, 13);
+			this.lblRunning.TabIndex = 7;
+			this.lblRunning.Text = "NOT RUNNING";
 			// 
 			// gbOffset
 			// 
-			this.gbOffset.Controls.Add(this.textBox1);
+			this.gbOffset.Controls.Add(this.tbCustomOffset);
 			this.gbOffset.Controls.Add(this.lblOffset);
-			this.gbOffset.Controls.Add(this.button1);
+			this.gbOffset.Controls.Add(this.btnRequestCustom);
 			this.gbOffset.Location = new System.Drawing.Point(670, 12);
 			this.gbOffset.Name = "gbOffset";
 			this.gbOffset.Size = new System.Drawing.Size(324, 103);
 			this.gbOffset.TabIndex = 14;
 			this.gbOffset.TabStop = false;
 			this.gbOffset.Text = "Surface at custom offset";
+			// 
+			// textBox1
+			// 
+			this.tbCustomOffset.Location = new System.Drawing.Point(84, 29);
+			this.tbCustomOffset.Name = "tbCustomOffset";
+			this.tbCustomOffset.Size = new System.Drawing.Size(100, 20);
+			this.tbCustomOffset.TabIndex = 13;
+			this.tbCustomOffset.Text = "0x12345678";
 			// 
 			// lblOffset
 			// 
@@ -253,22 +261,15 @@
 			this.lblOffset.TabIndex = 12;
 			this.lblOffset.Text = "Offset (hex)";
 			// 
-			// button1
+			// btnRequestCustom
 			// 
-			this.button1.Location = new System.Drawing.Point(201, 24);
-			this.button1.Name = "button1";
-			this.button1.Size = new System.Drawing.Size(108, 28);
-			this.button1.TabIndex = 4;
-			this.button1.Text = "Request one frame";
-			this.button1.UseVisualStyleBackColor = true;
-			// 
-			// textBox1
-			// 
-			this.textBox1.Location = new System.Drawing.Point(84, 29);
-			this.textBox1.Name = "textBox1";
-			this.textBox1.Size = new System.Drawing.Size(100, 20);
-			this.textBox1.TabIndex = 13;
-			this.textBox1.Text = "0x12345678";
+			this.btnRequestCustom.Location = new System.Drawing.Point(201, 24);
+			this.btnRequestCustom.Name = "btnRequestCustom";
+			this.btnRequestCustom.Size = new System.Drawing.Size(108, 28);
+			this.btnRequestCustom.TabIndex = 4;
+			this.btnRequestCustom.Text = "Request one frame";
+			this.btnRequestCustom.UseVisualStyleBackColor = true;
+			this.btnRequestCustom.Click += new System.EventHandler(this.btnRequestCustom_Click);
 			// 
 			// timer
 			// 
@@ -306,7 +307,6 @@
 			this.Name = "MainForm";
 			this.Text = "CNC Buffer Spy Client";
 			this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
-			this.Load += new System.EventHandler(this.MainForm_Load);
 			this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.MainForm_KeyDown);
 			this.statusStrip.ResumeLayout(false);
 			this.statusStrip.PerformLayout();
@@ -343,9 +343,9 @@
 		private System.Windows.Forms.Label lblInjected;
 		private System.Windows.Forms.Label lblRunning;
 		private System.Windows.Forms.GroupBox gbOffset;
-		private System.Windows.Forms.TextBox textBox1;
+		private System.Windows.Forms.TextBox tbCustomOffset;
 		private System.Windows.Forms.Label lblOffset;
-		private System.Windows.Forms.Button button1;
+		private System.Windows.Forms.Button btnRequestCustom;
 		private System.Windows.Forms.Timer timer;
 	}
 }

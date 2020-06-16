@@ -18,6 +18,7 @@ enum class BufferType : uint32_t
 {
     DepthBuffer,
     ShroudBuffer,
+    AlphaBuffer,
     SurfaceTile,
     SurfacePrimary,
     SurfaceSidebar,
@@ -25,7 +26,10 @@ enum class BufferType : uint32_t
     SurfaceAlternative,
     SurfaceTemp,
     SurfaceComposite,
-    SurfaceCloak
+    SurfaceCloak,
+    SurfaceVoxel,
+    SurfaceVoxel2,
+    Custom,
 };
 
 enum class BufferPixelFormat
@@ -40,6 +44,7 @@ struct PipeRequest
     // named event to signal when data available
     DestinationBuffer buffer;
     BufferType bufferType;
+    uint32_t customOffset;
 };
 
 struct PipeFrame

@@ -4,7 +4,7 @@
 #include <Tlhelp32.h>
 #include <string>
 #include <filesystem>
-
+#include <cctype>
 #include "main.h"
 
 __declspec(dllexport) bool __cdecl StartProcess(const char* processName)

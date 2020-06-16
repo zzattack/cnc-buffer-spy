@@ -18,12 +18,17 @@ std::atomic<PipeRequest*> open_request;
 std::atomic<PipeFrame*> open_frame;
 
 bool EnsureBufferFits(uint32_t size);
+bool EnsureBuffersCompatible(BSurface* surface);
 bool EnsureBuffersCompatible(DSurface* surface);
-bool EnsureBuffersCompatible(ZBuffer* buffer);
 bool EnsureBuffersCompatible(IDirectDrawSurface* ddrawSurface, LPDDSURFACEDESC surfaceDesc);
-DSurface** getSurfacePointer(OffsetCollection* offsets, BufferType type);
+bool EnsureBuffersCompatible(ZBuffer* buffer);
+BSurface** getBSurfacePointer(OffsetCollection* offsets, BufferType type);
+DSurface** getDSurfacePointer(OffsetCollection* offsets, BufferType type);
 ZBuffer** getZBufferPointer(OffsetCollection* offsets, BufferType type);
-
+bool snapshotBSurface(BSurface* surface, OffsetCollection* offsets, PipeRequest* req);
+bool snapshotDSurface(DSurface* surface, OffsetCollection* offsets, PipeRequest* req);
+bool snapshotDDrawSurface(IDirectDrawSurface* surface, OffsetCollection* offsets, PipeRequest* req);
+bool snapshotZBuffer(ZBuffer* buffer, OffsetCollection* offsets, PipeRequest* req);
 
 int __cdecl GameLoopSpy(OffsetCollection* offsets) {
 
@@ -35,85 +40,32 @@ int __cdecl GameLoopSpy(OffsetCollection* offsets) {
     {
         bool requestHandled = false;
 
-        if (auto surface = getSurfacePointer(offsets, req->bufferType); surface != nullptr && *surface != nullptr) {
-            if (EnsureBuffersCompatible(*surface)) {
-                // copy current depth buffer into open_request's frame
-                if (req->buffer == DestinationBuffer::Buffer1)
-                    memcpy(pMapBuf1, (*surface)->Buffer, mapFileSize);
-                else if (req->buffer == DestinationBuffer::Buffer2)
-                    memcpy(pMapBuf2, (*surface)->Buffer, mapFileSize);
+        if (req->bufferType == BufferType::Custom)
+        {
+            // look at surface on custom offset
+            DSurface* dSurface = (DSurface*)req->customOffset;
+            BSurface* bSurface = (BSurface*)req->customOffset;
+            ZBuffer* zBuffer = (ZBuffer*)req->customOffset;
 
-                // nudge pipe server that request is filled
-                PipeMessage msg;
-                msg.messageType = PipeMessageType::FrameAvailable;
-                msg.frame.frameNumber = *offsets->game_frame;
-                msg.frame.width = (*surface)->xs.s.Width;
-                msg.frame.height = (*surface)->xs.s.Height;
-                msg.frame.bufferType = req->bufferType;
-                msg.frame.destinationBuffer = req->buffer;
-                msg.frame.sourceBuffer = (*surface)->Buffer;
-                msg.frame.sourceAnchor = 0;
-                msg.frame.pixelFormat = (*surface)->xs.BytesPerPixel == 2 ? BufferPixelFormat::Format16bpRGB : BufferPixelFormat::Format8bpp;
-                msg.frame.bytesPerPixel = (*surface)->xs.BytesPerPixel;
-                std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
-                pipeServer->writeToPipe(v);
-                requestHandled = true;
-            }
-
-            else if (EnsureBuffersCompatible((*surface)->DDrawSurface, (*surface)->SurfaceDesc))
-            {
-                DDSURFACEDESC desc;
-                memset(&desc, 0, sizeof(DDSURFACEDESC));
-                desc.dwSize = sizeof(DDSURFACEDESC);
-                if ((*surface)->DDrawSurface->Lock(nullptr, &desc, DDLOCK_SURFACEMEMORYPTR, nullptr) == DD_OK)
-                {
-                    if (req->buffer == DestinationBuffer::Buffer1)
-                        memcpy(pMapBuf1, desc.lpSurface, mapFileSize);
-                    else if (req->buffer == DestinationBuffer::Buffer2)
-                        memcpy(pMapBuf2, desc.lpSurface, mapFileSize);
-                    (*surface)->DDrawSurface->Unlock(nullptr);
-
-                    PipeMessage msg;
-                    msg.messageType = PipeMessageType::FrameAvailable;
-                    msg.frame.frameNumber = *offsets->game_frame;
-                    msg.frame.width = desc.dwWidth;
-                    msg.frame.height = desc.dwHeight;
-                    msg.frame.bufferType = req->bufferType;
-                    msg.frame.destinationBuffer = req->buffer;
-                    msg.frame.sourceBuffer = (uint16_t*)desc.lpSurface;
-                    msg.frame.sourceAnchor = 0;
-                    msg.frame.pixelFormat = BufferPixelFormat::Format16bpRGB;
-                    msg.frame.bytesPerPixel = desc.lPitch / desc.dwWidth;
-                    std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
-                    pipeServer->writeToPipe(v);
-                    requestHandled = true;
-                }
-            }
-
+            // TODO: look into each, see if they make sense, and if so, attempt to snapshot them
         }
 
-        else if (auto zbuf = getZBufferPointer(offsets, req->bufferType); zbuf && *zbuf && EnsureBuffersCompatible(*zbuf)) {
-            // copy current depth buffer into open_request's frame
-            if (req->buffer == DestinationBuffer::Buffer1)
-                memcpy(pMapBuf1, (*zbuf)->data, mapFileSize);
-            else if (req->buffer == DestinationBuffer::Buffer2)
-                memcpy(pMapBuf2, (*zbuf)->data, mapFileSize);
+        else if (const auto bsurface = getBSurfacePointer(offsets, req->bufferType); bsurface && *bsurface && EnsureBuffersCompatible(*bsurface)) {
+            requestHandled = snapshotBSurface(*bsurface, offsets, req);
+        }
 
-            // nudge pipe server that request is filled
-            PipeMessage msg;
-            msg.messageType = PipeMessageType::FrameAvailable;
-            msg.frame.frameNumber = *offsets->game_frame;
-            msg.frame.width = (*zbuf)->width;
-            msg.frame.height = (*zbuf)->height;
-            msg.frame.bufferType = req->bufferType;
-            msg.frame.destinationBuffer = req->buffer;
-            msg.frame.sourceBuffer = (*zbuf)->data;
-            msg.frame.sourceAnchor = (*zbuf)->buffer_anchor;
-            msg.frame.pixelFormat = BufferPixelFormat::Format16bppGrayscale;
-            msg.frame.bytesPerPixel = 2;
-            std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
-            pipeServer->writeToPipe(v);
-            requestHandled = true;
+        else if (const auto dsurface = getDSurfacePointer(offsets, req->bufferType); dsurface != nullptr && *dsurface != nullptr) {
+            if (EnsureBuffersCompatible(*dsurface)) {                
+                requestHandled = snapshotDSurface(*dsurface, offsets, req);
+            }
+            else if (EnsureBuffersCompatible((*dsurface)->DDrawSurface, (*dsurface)->SurfaceDesc))
+            {
+                requestHandled = snapshotDDrawSurface((*dsurface)->DDrawSurface, offsets, req);
+            }
+        }
+
+        else if (const auto zbuf = getZBufferPointer(offsets, req->bufferType); zbuf && *zbuf && EnsureBuffersCompatible(*zbuf)) {            
+            requestHandled = snapshotZBuffer(*zbuf, offsets, req);
         }
 
         if (!requestHandled)
@@ -142,6 +94,16 @@ int __cdecl GameLoopYR()
 int __cdecl GameLoopTS()
 {
     return GameLoopSpy(&OffsetsTS);
+}
+
+bool EnsureBuffersCompatible(BSurface* surface)
+{
+    if (surface == nullptr && surface->Buffer.BufferPtr != nullptr)
+        return false;
+
+    // Create file mappings for 2 buffers
+    uint32_t size = surface->xs.s.Width * surface->xs.s.Height * surface->xs.BytesPerPixel;
+    return EnsureBufferFits(size);
 }
 
 bool EnsureBuffersCompatible(DSurface* surface)
@@ -205,8 +167,17 @@ bool EnsureBufferFits(uint32_t size) {
     return hMap1 && hMap2 && pMapBuf1 && pMapBuf2 && mapFileSize == size;
 }
 
+BSurface** getBSurfacePointer(OffsetCollection* offsets, BufferType type)
+{
+    switch (type)
+    {
+        case BufferType::SurfaceVoxel: return offsets->voxel;
+        case BufferType::SurfaceVoxel2: return offsets->voxel2;
+        default: return nullptr;
+    }
+}
 
-DSurface** getSurfacePointer(OffsetCollection* offsets, BufferType type)
+DSurface** getDSurfacePointer(OffsetCollection* offsets, BufferType type)
 {
     switch (type)
     {
@@ -228,10 +199,116 @@ ZBuffer** getZBufferPointer(OffsetCollection* offsets, BufferType type)
     {
         case BufferType::DepthBuffer: return offsets->depth_buffer;
         case BufferType::ShroudBuffer: return offsets->shroud_buffer;
+        case BufferType::AlphaBuffer: return offsets->alpha_buffer;
         default: return nullptr;
     }
 }
 
+bool snapshotBSurface(BSurface* bsurface, OffsetCollection* offsets, PipeRequest* req)
+{
+    // copy current depth buffer into open_request's frame
+    if (req->buffer == DestinationBuffer::Buffer1)
+        memcpy(pMapBuf1, bsurface->Buffer.BufferPtr, mapFileSize);
+    else if (req->buffer == DestinationBuffer::Buffer2)
+        memcpy(pMapBuf2, bsurface->Buffer.BufferPtr, mapFileSize);
+
+    // nudge pipe server that request is filled
+    PipeMessage msg;
+    msg.messageType = PipeMessageType::FrameAvailable;
+    msg.frame.frameNumber = *offsets->game_frame;
+    msg.frame.width = bsurface->xs.s.Width;
+    msg.frame.height = bsurface->xs.s.Height;
+    msg.frame.bufferType = req->bufferType;
+    msg.frame.destinationBuffer = req->buffer;
+    msg.frame.sourceBuffer = (uint16_t*)bsurface->Buffer.BufferPtr;
+    msg.frame.sourceAnchor = 0;
+    msg.frame.pixelFormat = BufferPixelFormat::Format16bppGrayscale;
+    msg.frame.bytesPerPixel = 2;
+    std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
+    pipeServer->writeToPipe(v);
+    return true;
+}
+
+bool snapshotDSurface(DSurface* dsurface, OffsetCollection* offsets, PipeRequest* req)
+{
+    // copy current depth buffer into open_request's frame
+    if (req->buffer == DestinationBuffer::Buffer1)
+        memcpy(pMapBuf1, dsurface->Buffer, mapFileSize);
+    else if (req->buffer == DestinationBuffer::Buffer2)
+        memcpy(pMapBuf2, dsurface->Buffer, mapFileSize);
+
+    // nudge pipe server that request is filled
+    PipeMessage msg;
+    msg.messageType = PipeMessageType::FrameAvailable;
+    msg.frame.frameNumber = *offsets->game_frame;
+    msg.frame.width = dsurface->xs.s.Width;
+    msg.frame.height = dsurface->xs.s.Height;
+    msg.frame.bufferType = req->bufferType;
+    msg.frame.destinationBuffer = req->buffer;
+    msg.frame.sourceBuffer = (uint16_t*)dsurface->Buffer;
+    msg.frame.sourceAnchor = 0;
+    msg.frame.pixelFormat = BufferPixelFormat::Format16bppGrayscale;
+    msg.frame.bytesPerPixel = 2;
+    std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
+    pipeServer->writeToPipe(v);
+    return true;
+}
+
+bool snapshotDDrawSurface(IDirectDrawSurface* surface, OffsetCollection* offsets, PipeRequest* req)
+{
+    DDSURFACEDESC desc;
+    memset(&desc, 0, sizeof(DDSURFACEDESC));
+    desc.dwSize = sizeof(DDSURFACEDESC);
+    if (surface->Lock(nullptr, &desc, DDLOCK_SURFACEMEMORYPTR, nullptr) == DD_OK)
+    {
+        if (req->buffer == DestinationBuffer::Buffer1)
+            memcpy(pMapBuf1, desc.lpSurface, mapFileSize);
+        else if (req->buffer == DestinationBuffer::Buffer2)
+            memcpy(pMapBuf2, desc.lpSurface, mapFileSize);
+        surface->Unlock(nullptr);
+
+        PipeMessage msg;
+        msg.messageType = PipeMessageType::FrameAvailable;
+        msg.frame.frameNumber = *offsets->game_frame;
+        msg.frame.width = desc.dwWidth;
+        msg.frame.height = desc.dwHeight;
+        msg.frame.bufferType = req->bufferType;
+        msg.frame.destinationBuffer = req->buffer;
+        msg.frame.sourceBuffer = (uint16_t*)desc.lpSurface;
+        msg.frame.sourceAnchor = 0;
+        msg.frame.pixelFormat = BufferPixelFormat::Format16bpRGB;
+        msg.frame.bytesPerPixel = desc.lPitch / desc.dwWidth;
+        std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
+        pipeServer->writeToPipe(v);
+        return true;
+    }
+    return false;
+}
+
+bool snapshotZBuffer(ZBuffer* buffer, OffsetCollection* offsets, PipeRequest* req)
+{
+    // copy current depth buffer into open_request's frame
+    if (req->buffer == DestinationBuffer::Buffer1)
+        memcpy(pMapBuf1, buffer->data, mapFileSize);
+    else if (req->buffer == DestinationBuffer::Buffer2)
+        memcpy(pMapBuf2, buffer->data, mapFileSize);
+
+    // nudge pipe server that request is filled
+    PipeMessage msg;
+    msg.messageType = PipeMessageType::FrameAvailable;
+    msg.frame.frameNumber = *offsets->game_frame;
+    msg.frame.width = buffer->width;
+    msg.frame.height = buffer->height;
+    msg.frame.bufferType = req->bufferType;
+    msg.frame.destinationBuffer = req->buffer;
+    msg.frame.sourceBuffer = buffer->data;
+    msg.frame.sourceAnchor = buffer->buffer_anchor;
+    msg.frame.pixelFormat = BufferPixelFormat::Format16bppGrayscale;
+    msg.frame.bytesPerPixel = 2;
+    std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
+    pipeServer->writeToPipe(v);
+    return true;
+}
 
 void Log(const char* format, ...)
 {
