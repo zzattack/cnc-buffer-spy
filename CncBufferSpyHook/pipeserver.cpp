@@ -3,7 +3,6 @@
 
 #include <cstdio>
 #include <Windows.h>
-#include <thread>
 #include <algorithm>
 #include <utility>
 
@@ -23,14 +22,22 @@ PipeServer::~PipeServer()
 void PipeServer::start()
 {
     keepAlive = true;
-    pipeThread = std::thread(&PipeServer::threadFunc, this);
+    pipeThread = CreateThread(nullptr, 0, (LPTHREAD_START_ROUTINE)&PipeServer::threadStart, this, 0, nullptr);
+    if (!pipeThread)
+        MessageBox(NULL, "CreateThread failed", "Error", 0);
+}
+
+DWORD WINAPI PipeServer::threadStart(void* argument)
+{
+    reinterpret_cast<PipeServer*>(argument)->threadFunc();
+    return 0;
 }
 
 void PipeServer::stop()
 {
-    keepAlive = false;
-    SetEvent(oNewData.hEvent);
-    pipeThread.join();
+    keepAlive = false; // indicate we want threadFunct to return
+    SetEvent(oNewData.hEvent); // nudge it
+    WaitForSingleObject(pipeThread, INFINITE); // join thread
 }
 
 void PipeServer::threadFunc()

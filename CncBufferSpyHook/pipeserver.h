@@ -38,13 +38,14 @@ private:
     bool keepAlive;
     BOOL writeInProgress = false;
 
+    static DWORD WINAPI threadStart(void* param);
     void start();
     void stop();
     void threadFunc();
     bool createAndConnectPipe();
     void flushWriteQueue();
 
-    std::thread pipeThread;
+    HANDLE pipeThread;
     std::deque<unsigned char> writeQueue;
     std::mutex mtxWriteQueue;
     dataReceivedCallback onDataReceived;
