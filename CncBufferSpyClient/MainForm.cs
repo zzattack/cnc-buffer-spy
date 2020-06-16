@@ -2,8 +2,10 @@
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.IO.Pipes;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -31,7 +33,7 @@ namespace CncBufferSpyClient {
 
 		public MainForm() {
 			InitializeComponent();
-			cbBufferType.DataSource = Enum.GetNames(typeof(SurfaceType));
+			cbBufferType.DataSource = Enum.GetValues(typeof(SurfaceType)).OfType<SurfaceType>().Where(e => e != SurfaceType.Invalid).ToList();
 		}
 
 		private void buttonLaunch_Click(object sender, EventArgs e) {
@@ -114,7 +116,7 @@ namespace CncBufferSpyClient {
 			}
 		}
 
-		private unsafe Image ImageFromMappedFileView(PipeFrame frame) {
+		private unsafe Bitmap ImageFromMappedFileView(PipeFrame frame) {
 			if (!EnsureBuffersCompatible(frame))
 				return null;
 
@@ -125,20 +127,21 @@ namespace CncBufferSpyClient {
 			byte* ptr = null;
 			view.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
 			var bmd = bm.LockBits(new Rectangle(0, 0, bm.Width, bm.Height), ImageLockMode.WriteOnly, PixelFormat.Format24bppRgb);
-			
-			bool jet = ckbJetColormap.Checked;
-			int anchor_x = (int)((frame.SourceBufferAnchor/2) % frame.Width);
-			int anchor_y = (int)((frame.SourceBufferAnchor/2) / frame.Width);
 
-			bool dump = false;
-			if (frame.BytesPerPixel == 2)
-				Blit16bpp(frame, ptr, bmd, anchor_y, anchor_x, jet);
-			else if (frame.BytesPerPixel == 1)
-				Blit8bpp(frame, ptr, bmd, anchor_x, anchor_y);
+			bool jet = ckbJetColormap.Checked;
+			int anchorX = (int)((frame.SourceBufferAnchor/2) % frame.Width);
+			int anchorY = (int)((frame.SourceBufferAnchor/2) / frame.Width);
+
+			if (frame.PixelFormat == BufferPixelFormat.Format16bppGrayscale)
+				Blit16bppGrayscale(frame, ptr, bmd, anchorY, anchorX, jet);
+			if (frame.PixelFormat == BufferPixelFormat.Format16bppRGB)
+				Blit16bppRGB(frame, ptr, bmd, anchorY, anchorX);
+			else if (frame.PixelFormat == BufferPixelFormat.Format8bpp)
+				Blit8bpp(frame, ptr, bmd, anchorX, anchorY);
 
 			view.SafeMemoryMappedViewHandle.ReleasePointer();
 			bm.UnlockBits(bmd);
-			
+
 			lock (mapViewLock)
 				_mapViewOfShownImage = view;
 			_lastFrame = frame;
@@ -163,7 +166,7 @@ namespace CncBufferSpyClient {
 			}
 		}
 
-		private static unsafe void Blit16bpp(PipeFrame frame, byte* ptr, BitmapData bmd, int anchorY, int anchorX, bool jet) {
+		private static unsafe void Blit16bppGrayscale(PipeFrame frame, byte* ptr, BitmapData bmd, int anchorY, int anchorX, bool jet) {
 			// determine range
 			ushort* p = (ushort*) ptr;
 			ushort min = 65535;
@@ -201,6 +204,23 @@ namespace CncBufferSpyClient {
 						*w++ = scan[col * 2 + 0];
 						*w++ = scan[col * 2 + 0];
 					}
+
+					col++;
+					if (col == frame.Width) col = 0;
+				}
+			}
+		}
+		private static unsafe void Blit16bppRGB(PipeFrame frame, byte* ptr, BitmapData bmd, int anchorY, int anchorX) {
+			for (int row = 0; row < bmd.Height; row++) {
+				byte* w = (byte*) bmd.Scan0.ToPointer() + row * bmd.Stride;
+				ushort* scan = (ushort*)(ptr + 2 * ((row + anchorY) % frame.Height) * frame.Width);
+
+				int endCol = (int) ((anchorX + frame.Width - 1) % frame.Width);
+				for (int col = anchorX; col != endCol;) {
+					ushort bgr565 = scan[col];
+					*w++ = (byte)((bgr565 & 0x001F) << 3); // b
+					*w++ = (byte)((bgr565 & 0x07E0) >> 3); // g
+					*w++ = (byte)((bgr565 & 0xF800) >> 8); // r
 
 					col++;
 					if (col == frame.Width) col = 0;

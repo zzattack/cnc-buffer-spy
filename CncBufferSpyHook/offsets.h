@@ -42,7 +42,8 @@ struct __declspec(align(4)) DSurface
     XSurface xs;
     uint16_t* Buffer;
     bool IsAllocated;
-    BOOL InVideoMemory;
+    bool InVram;
+    uint16_t unknown;
     IDirectDrawSurface* DDrawSurface;
     LPDDSURFACEDESC SurfaceDesc;
 };
@@ -83,35 +84,37 @@ struct OffsetCollection
 };
 
 OffsetCollection OffsetsRA2 = {
-    .sku = (unsigned int*)(ImageBase + 0x00343070),
-    //.version = (unsigned int*)(ImageBase + 0x0066f3f4), // not always readable soon enough
-    .game_frame = (unsigned int*)(ImageBase + 0x00640D2C),
-    .game_loop = (GameLoop)(ImageBase + 0x0013fbd0),
-    .tiles = (DSurface**)(ImageBase + 0x00439C6C),
+    .sku = (unsigned int*)0x00743070,
+    //.version = (unsigned int*)0x00A6f3f4, // not always readable soon enough
+    .game_frame = (unsigned int*)0x00A40D2C,
+    .game_loop = (GameLoop)0x0053fbd0,
+    .depth_buffer = (ZBuffer**)0x00839C6C,
+    .shroud_buffer = (ZBuffer**)0x008315B4,
 };
 
 OffsetCollection OffsetsYR = {
-    .sku = (unsigned int*)(ImageBase + 0x0044A234),
-    //.version= (unsigned int*)(ImageBase + 0x00443118), // unreliable offset
-    .game_frame = (unsigned int*)(ImageBase + 0x0068b564), 
-    .game_loop = (GameLoop)(ImageBase + 0x0015d360),
-    .depth_buffer = (ZBuffer**)(ImageBase + 0x00487644),
-    .tiles = (DSurface**)(ImageBase + 0x004872FC),
-    .primary = (DSurface**)(ImageBase + 0x00487308),
-    .sidebar = (DSurface**)(ImageBase + 0x00487300),
-    .hidden = (DSurface**)(ImageBase + 0x0048730C),
-    .alt = (DSurface**)(ImageBase + 0x00487310),
-    .temp = (DSurface**)(ImageBase + 0x00487314),
-    .composite = (DSurface**)(ImageBase + 0x0048731C),
-    .cloak = (DSurface**)(ImageBase + 0x0049DDC0),
+    .sku = (unsigned int*)0x0084A234,
+    //.version= (unsigned int*)(0x00843118), // unreliable offset
+    .game_frame = (unsigned int*)0x00A8b564, 
+    .game_loop = (GameLoop)0x0055d360,
+    .depth_buffer = (ZBuffer**)0x00887644,
+    .shroud_buffer = (ZBuffer**)0x0087E8A4,
+    .tiles = (DSurface**)0x008872FC,
+    .primary = (DSurface**)0x00887308,
+    .sidebar = (DSurface**)0x00887300,
+    .hidden = (DSurface**)0x0088730C,
+    .alt = (DSurface**)0x00887310,
+    .temp = (DSurface**)0x00887314,
+    .composite = (DSurface**)0x0088731C,
+    .cloak = (DSurface**)0x0089DDC0,
 };
 
 OffsetCollection OffsetsTS = {
-    .sku = (unsigned int*)(ImageBase + 0x002931A8),
-    .version = (unsigned int*)(ImageBase + 0x00297604),
-    .game_frame = (unsigned int*)(ImageBase + 0x003E4924),
-    .game_loop = (GameLoop)(ImageBase + 0x00108A40),
-    .depth_buffer = (ZBuffer**)(ImageBase + 0x0034C8F4),
-    // .shroud_buffer = (buffers_base_t**)(ImageBase + 0x003474A8),
-    .cloak = (DSurface**)(ImageBase + 0x00360540),
+    .sku = (unsigned int*)0x006931A8,
+    .version = (unsigned int*)0x00697604,
+    .game_frame = (unsigned int*)0x007E4924,
+    .game_loop = (GameLoop)0x00508A40,
+    .depth_buffer = (ZBuffer**)0x0074C8F4,
+    .shroud_buffer = (ZBuffer**)0x007474A8,
+    .cloak = (DSurface**)0x00760540,
 };

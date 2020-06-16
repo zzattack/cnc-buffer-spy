@@ -28,13 +28,21 @@ namespace CncBufferSpyClient {
 		SurfaceAlternative,
 		SurfaceTemp,
 		SurfaceComposite,
-		SurfaceCloak
+		SurfaceCloak,
+		Invalid = 0xFFFFFFFF
+	}
+
+	public enum BufferPixelFormat : uint {
+		Format8bpp,
+		Format16bppGrayscale,
+		Format16bppRGB,
 	}
 
 	[StructLayout(LayoutKind.Sequential, Pack = 4)]
 	public struct PipeFrame {
 		public uint Width;
 		public uint Height;
+		public BufferPixelFormat PixelFormat;
 		public uint BytesPerPixel;
 		public SurfaceType SurfaceType;
 		public uint FrameNumber;

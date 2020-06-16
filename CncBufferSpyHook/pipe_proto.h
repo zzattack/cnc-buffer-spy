@@ -28,6 +28,13 @@ enum class BufferType : uint32_t
     SurfaceCloak
 };
 
+enum class BufferPixelFormat
+{
+    Format8bpp,
+    Format16bppGrayscale,
+    Format16bpRGB
+};
+
 struct PipeRequest
 {
     // named event to signal when data available
@@ -39,6 +46,7 @@ struct PipeFrame
 {
     uint32_t width;
     uint32_t height;
+    BufferPixelFormat pixelFormat;
     uint32_t bytesPerPixel;
     BufferType bufferType;
     uint32_t frameNumber;

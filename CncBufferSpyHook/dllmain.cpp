@@ -36,7 +36,7 @@ int __cdecl GameLoopSpy(OffsetCollection* offsets) {
         bool requestHandled = false;
 
         if (auto surface = getSurfacePointer(offsets, req->bufferType); surface != nullptr && *surface != nullptr) {
-            if (EnsureBuffersCompatible(*surface)){
+            if (EnsureBuffersCompatible(*surface)) {
                 // copy current depth buffer into open_request's frame
                 if (req->buffer == DestinationBuffer::Buffer1)
                     memcpy(pMapBuf1, (*surface)->Buffer, mapFileSize);
@@ -52,15 +52,40 @@ int __cdecl GameLoopSpy(OffsetCollection* offsets) {
                 msg.frame.destinationBuffer = req->buffer;
                 msg.frame.sourceBuffer = (*surface)->Buffer;
                 msg.frame.sourceAnchor = 0;
+                msg.frame.pixelFormat = (*surface)->xs.BytesPerPixel == 2 ? BufferPixelFormat::Format16bpRGB : BufferPixelFormat::Format8bpp;
                 msg.frame.bytesPerPixel = (*surface)->xs.BytesPerPixel;
                 std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
-                pipeServer.writeToPipe(v);
+                pipeServer->writeToPipe(v);
                 requestHandled = true;
             }
-            
-            else if (EnsureBuffersCompatible((*surface)->DDrawSurface, nullptr))
+
+            else if (EnsureBuffersCompatible((*surface)->DDrawSurface, (*surface)->SurfaceDesc))
             {
-                // todo: lock ddraw surface, copy to mapped file
+                DDSURFACEDESC desc;
+                memset(&desc, 0, sizeof(DDSURFACEDESC));
+                desc.dwSize = sizeof(DDSURFACEDESC);
+                if ((*surface)->DDrawSurface->Lock(nullptr, &desc, DDLOCK_SURFACEMEMORYPTR, nullptr) == DD_OK)
+                {
+                    if (req->buffer == DestinationBuffer::Buffer1)
+                        memcpy(pMapBuf1, desc.lpSurface, mapFileSize);
+                    else if (req->buffer == DestinationBuffer::Buffer2)
+                        memcpy(pMapBuf2, desc.lpSurface, mapFileSize);
+                    (*surface)->DDrawSurface->Unlock(nullptr);
+
+                    PipeMessage msg{ .messageType = PipeMessageType::FrameAvailable };
+                    msg.frame.frameNumber = *offsets->game_frame;
+                    msg.frame.width = desc.dwWidth;
+                    msg.frame.height = desc.dwHeight;
+                    msg.frame.bufferType = req->bufferType;
+                    msg.frame.destinationBuffer = req->buffer;
+                    msg.frame.sourceBuffer = (uint16_t*)desc.lpSurface;
+                    msg.frame.sourceAnchor = 0;
+                    msg.frame.pixelFormat = BufferPixelFormat::Format16bpRGB;
+                    msg.frame.bytesPerPixel = desc.lPitch / desc.dwWidth;
+                    std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
+                    pipeServer->writeToPipe(v);
+                    requestHandled = true;
+                }
             }
 
         }
@@ -73,7 +98,7 @@ int __cdecl GameLoopSpy(OffsetCollection* offsets) {
                 memcpy(pMapBuf2, (*zbuf)->data, mapFileSize);
 
             // nudge pipe server that request is filled
-            PipeMessage msg { .messageType = PipeMessageType::FrameAvailable };
+            PipeMessage msg{ .messageType = PipeMessageType::FrameAvailable };
             msg.frame.frameNumber = *offsets->game_frame;
             msg.frame.width = (*zbuf)->width;
             msg.frame.height = (*zbuf)->height;
@@ -81,6 +106,7 @@ int __cdecl GameLoopSpy(OffsetCollection* offsets) {
             msg.frame.destinationBuffer = req->buffer;
             msg.frame.sourceBuffer = (*zbuf)->data;
             msg.frame.sourceAnchor = (*zbuf)->buffer_anchor;
+            msg.frame.pixelFormat = BufferPixelFormat::Format16bppGrayscale;
             msg.frame.bytesPerPixel = 2;
             std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
             pipeServer->writeToPipe(v);
@@ -126,8 +152,9 @@ bool EnsureBuffersCompatible(DSurface* surface)
 
 bool EnsureBuffersCompatible(IDirectDrawSurface* ddrawSurface, LPDDSURFACEDESC surfaceDesc)
 {
-    // TODO: figure out pixel format/buffer dimensinos of surface
-    return false;
+    if (surfaceDesc == nullptr)
+        return false;
+    return EnsureBufferFits(surfaceDesc->dwHeight * surfaceDesc->lPitch);
 }
 
 bool EnsureBuffersCompatible(ZBuffer* buffer)
@@ -156,14 +183,19 @@ bool EnsureBufferFits(uint32_t size) {
         if (hMap1 && hMap2) {
             mapFileSize = size;
 
-            pMapBuf1 = MapViewOfFile(hMap1, FILE_MAP_ALL_ACCESS, 0, 0, mapFileSize);
-            pMapBuf2 = MapViewOfFile(hMap2, FILE_MAP_ALL_ACCESS, 0, 0, mapFileSize);
+            pMapBuf1 = MapViewOfFile(hMap1, FILE_MAP_WRITE, 0, 0, mapFileSize);
+            pMapBuf2 = MapViewOfFile(hMap2, FILE_MAP_WRITE, 0, 0, mapFileSize);
 
-            if (!pMapBuf1 || !pMapBuf2)
-                MessageBox(NULL, "Could not obtain map view", "Error", 0);
+            if (!pMapBuf1 || !pMapBuf2) {
+                Log("Could not obtain map view");
+                //MessageBox(NULL, "Could not obtain map view", "Error", 0);
+            }
         }
         else
-            MessageBox(NULL, "Could not allocate map space", "Error", 0);
+        {
+            Log("Could not allocate map space");
+            // MessageBox(NULL, "Could not allocate map space", "Error", 0);
+        }
     }
 
     return hMap1 && hMap2 && pMapBuf1 && pMapBuf2 && mapFileSize == size;
@@ -191,6 +223,7 @@ ZBuffer** getZBufferPointer(OffsetCollection* offsets, BufferType type)
     switch (type)
     {
         case BufferType::DepthBuffer: return offsets->depth_buffer;
+        case BufferType::ShroudBuffer: return offsets->shroud_buffer;
         default: return nullptr;
     }
 }
