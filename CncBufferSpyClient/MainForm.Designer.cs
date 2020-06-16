@@ -30,7 +30,6 @@
 			this.tbExecutablePath = new System.Windows.Forms.TextBox();
 			this.btnConnect = new System.Windows.Forms.Button();
 			this.toolTip = new System.Windows.Forms.ToolTip(this.components);
-			this.checkBox1 = new System.Windows.Forms.CheckBox();
 			this.cbAutoRefresh = new System.Windows.Forms.CheckBox();
 			this.statusStrip = new System.Windows.Forms.StatusStrip();
 			this.toolStripLabel = new System.Windows.Forms.ToolStripStatusLabel();
@@ -38,13 +37,26 @@
 			this.ckbJetColormap = new System.Windows.Forms.CheckBox();
 			this.cbBufferType = new System.Windows.Forms.ComboBox();
 			this.lblBufferType = new System.Windows.Forms.Label();
+			this.gbLayers = new System.Windows.Forms.GroupBox();
+			this.gbProcess = new System.Windows.Forms.GroupBox();
+			this.lblRunning = new System.Windows.Forms.Label();
+			this.lblInjected = new System.Windows.Forms.Label();
+			this.lblConnected = new System.Windows.Forms.Label();
+			this.gbOffset = new System.Windows.Forms.GroupBox();
+			this.lblOffset = new System.Windows.Forms.Label();
+			this.button1 = new System.Windows.Forms.Button();
+			this.textBox1 = new System.Windows.Forms.TextBox();
+			this.timer = new System.Windows.Forms.Timer(this.components);
 			this.canvas = new CncBufferSpyClient.ZoomableCanvas();
 			this.statusStrip.SuspendLayout();
+			this.gbLayers.SuspendLayout();
+			this.gbProcess.SuspendLayout();
+			this.gbOffset.SuspendLayout();
 			this.SuspendLayout();
 			// 
 			// btnLaunch
 			// 
-			this.btnLaunch.Location = new System.Drawing.Point(35, 12);
+			this.btnLaunch.Location = new System.Drawing.Point(18, 19);
 			this.btnLaunch.Name = "btnLaunch";
 			this.btnLaunch.Size = new System.Drawing.Size(82, 28);
 			this.btnLaunch.TabIndex = 1;
@@ -55,7 +67,7 @@
 			// 
 			// btnInject
 			// 
-			this.btnInject.Location = new System.Drawing.Point(123, 12);
+			this.btnInject.Location = new System.Drawing.Point(121, 19);
 			this.btnInject.Name = "btnInject";
 			this.btnInject.Size = new System.Drawing.Size(82, 28);
 			this.btnInject.TabIndex = 2;
@@ -66,7 +78,7 @@
 			// 
 			// btnRequestSingleFrame
 			// 
-			this.btnRequestSingleFrame.Location = new System.Drawing.Point(362, 12);
+			this.btnRequestSingleFrame.Location = new System.Drawing.Point(201, 24);
 			this.btnRequestSingleFrame.Name = "btnRequestSingleFrame";
 			this.btnRequestSingleFrame.Size = new System.Drawing.Size(108, 28);
 			this.btnRequestSingleFrame.TabIndex = 4;
@@ -76,15 +88,16 @@
 			// 
 			// tbExecutablePath
 			// 
-			this.tbExecutablePath.Location = new System.Drawing.Point(35, 46);
+			this.tbExecutablePath.DataBindings.Add(new System.Windows.Forms.Binding("Text", global::CncBufferSpyClient.Properties.Settings.Default, "executablePath", true, System.Windows.Forms.DataSourceUpdateMode.OnPropertyChanged));
+			this.tbExecutablePath.Location = new System.Drawing.Point(18, 53);
 			this.tbExecutablePath.Name = "tbExecutablePath";
-			this.tbExecutablePath.Size = new System.Drawing.Size(258, 20);
+			this.tbExecutablePath.Size = new System.Drawing.Size(286, 20);
 			this.tbExecutablePath.TabIndex = 5;
-			this.tbExecutablePath.Text = "C:\\Westwood\\RA2\\gamemd.exe";
+			this.tbExecutablePath.Text = global::CncBufferSpyClient.Properties.Settings.Default.executablePath;
 			// 
 			// btnConnect
 			// 
-			this.btnConnect.Location = new System.Drawing.Point(211, 12);
+			this.btnConnect.Location = new System.Drawing.Point(222, 19);
 			this.btnConnect.Name = "btnConnect";
 			this.btnConnect.Size = new System.Drawing.Size(82, 28);
 			this.btnConnect.TabIndex = 6;
@@ -93,24 +106,12 @@
 			this.btnConnect.UseVisualStyleBackColor = true;
 			this.btnConnect.Click += new System.EventHandler(this.btnConnect_Click);
 			// 
-			// checkBox1
-			// 
-			this.checkBox1.Appearance = System.Windows.Forms.Appearance.Button;
-			this.checkBox1.AutoSize = true;
-			this.checkBox1.Location = new System.Drawing.Point(489, 15);
-			this.checkBox1.Name = "checkBox1";
-			this.checkBox1.Size = new System.Drawing.Size(74, 23);
-			this.checkBox1.TabIndex = 7;
-			this.checkBox1.Text = "Auto-refresh";
-			this.checkBox1.UseVisualStyleBackColor = true;
-			// 
 			// cbAutoRefresh
 			// 
-			this.cbAutoRefresh.Appearance = System.Windows.Forms.Appearance.Button;
 			this.cbAutoRefresh.AutoSize = true;
-			this.cbAutoRefresh.Location = new System.Drawing.Point(488, 15);
+			this.cbAutoRefresh.Location = new System.Drawing.Point(201, 58);
 			this.cbAutoRefresh.Name = "cbAutoRefresh";
-			this.cbAutoRefresh.Size = new System.Drawing.Size(74, 23);
+			this.cbAutoRefresh.Size = new System.Drawing.Size(83, 17);
 			this.cbAutoRefresh.TabIndex = 7;
 			this.cbAutoRefresh.Text = "Auto-refresh";
 			this.cbAutoRefresh.UseVisualStyleBackColor = true;
@@ -149,7 +150,7 @@
 			this.ckbJetColormap.AutoSize = true;
 			this.ckbJetColormap.Checked = true;
 			this.ckbJetColormap.CheckState = System.Windows.Forms.CheckState.Checked;
-			this.ckbJetColormap.Location = new System.Drawing.Point(600, 19);
+			this.ckbJetColormap.Location = new System.Drawing.Point(58, 56);
 			this.ckbJetColormap.Name = "ckbJetColormap";
 			this.ckbJetColormap.Size = new System.Drawing.Size(86, 17);
 			this.ckbJetColormap.TabIndex = 10;
@@ -159,7 +160,7 @@
 			// cbBufferType
 			// 
 			this.cbBufferType.FormattingEnabled = true;
-			this.cbBufferType.Location = new System.Drawing.Point(829, 17);
+			this.cbBufferType.Location = new System.Drawing.Point(58, 29);
 			this.cbBufferType.Name = "cbBufferType";
 			this.cbBufferType.Size = new System.Drawing.Size(121, 21);
 			this.cbBufferType.TabIndex = 11;
@@ -168,11 +169,112 @@
 			// lblBufferType
 			// 
 			this.lblBufferType.AutoSize = true;
-			this.lblBufferType.Location = new System.Drawing.Point(788, 20);
+			this.lblBufferType.Location = new System.Drawing.Point(17, 32);
 			this.lblBufferType.Name = "lblBufferType";
 			this.lblBufferType.Size = new System.Drawing.Size(33, 13);
 			this.lblBufferType.TabIndex = 12;
 			this.lblBufferType.Text = "Layer";
+			// 
+			// gbLayers
+			// 
+			this.gbLayers.Controls.Add(this.lblBufferType);
+			this.gbLayers.Controls.Add(this.ckbJetColormap);
+			this.gbLayers.Controls.Add(this.cbBufferType);
+			this.gbLayers.Controls.Add(this.btnRequestSingleFrame);
+			this.gbLayers.Controls.Add(this.cbAutoRefresh);
+			this.gbLayers.Location = new System.Drawing.Point(340, 12);
+			this.gbLayers.Name = "gbLayers";
+			this.gbLayers.Size = new System.Drawing.Size(324, 103);
+			this.gbLayers.TabIndex = 13;
+			this.gbLayers.TabStop = false;
+			this.gbLayers.Text = "Predefined layers";
+			// 
+			// gbProcess
+			// 
+			this.gbProcess.Controls.Add(this.lblConnected);
+			this.gbProcess.Controls.Add(this.lblInjected);
+			this.gbProcess.Controls.Add(this.lblRunning);
+			this.gbProcess.Controls.Add(this.btnConnect);
+			this.gbProcess.Controls.Add(this.btnLaunch);
+			this.gbProcess.Controls.Add(this.btnInject);
+			this.gbProcess.Controls.Add(this.tbExecutablePath);
+			this.gbProcess.Location = new System.Drawing.Point(12, 12);
+			this.gbProcess.Name = "gbProcess";
+			this.gbProcess.Size = new System.Drawing.Size(322, 103);
+			this.gbProcess.TabIndex = 14;
+			this.gbProcess.TabStop = false;
+			this.gbProcess.Text = "Game process";
+			// 
+			// lblRunning
+			// 
+			this.lblRunning.AutoSize = true;
+			this.lblRunning.Location = new System.Drawing.Point(17, 80);
+			this.lblRunning.Name = "lblRunning";
+			this.lblRunning.Size = new System.Drawing.Size(84, 13);
+			this.lblRunning.TabIndex = 7;
+			this.lblRunning.Text = "NOT RUNNING";
+			// 
+			// lblInjected
+			// 
+			this.lblInjected.AutoSize = true;
+			this.lblInjected.Location = new System.Drawing.Point(119, 80);
+			this.lblInjected.Name = "lblInjected";
+			this.lblInjected.Size = new System.Drawing.Size(85, 13);
+			this.lblInjected.TabIndex = 8;
+			this.lblInjected.Text = "NOT INJECTED";
+			// 
+			// label1
+			// 
+			this.lblConnected.AutoSize = true;
+			this.lblConnected.Location = new System.Drawing.Point(218, 80);
+			this.lblConnected.Name = "lblConnected";
+			this.lblConnected.Size = new System.Drawing.Size(100, 13);
+			this.lblConnected.TabIndex = 9;
+			this.lblConnected.Text = "NOT CONNECTED";
+			// 
+			// gbOffset
+			// 
+			this.gbOffset.Controls.Add(this.textBox1);
+			this.gbOffset.Controls.Add(this.lblOffset);
+			this.gbOffset.Controls.Add(this.button1);
+			this.gbOffset.Location = new System.Drawing.Point(670, 12);
+			this.gbOffset.Name = "gbOffset";
+			this.gbOffset.Size = new System.Drawing.Size(324, 103);
+			this.gbOffset.TabIndex = 14;
+			this.gbOffset.TabStop = false;
+			this.gbOffset.Text = "Surface at custom offset";
+			// 
+			// lblOffset
+			// 
+			this.lblOffset.AutoSize = true;
+			this.lblOffset.Location = new System.Drawing.Point(17, 32);
+			this.lblOffset.Name = "lblOffset";
+			this.lblOffset.Size = new System.Drawing.Size(61, 13);
+			this.lblOffset.TabIndex = 12;
+			this.lblOffset.Text = "Offset (hex)";
+			// 
+			// button1
+			// 
+			this.button1.Location = new System.Drawing.Point(201, 24);
+			this.button1.Name = "button1";
+			this.button1.Size = new System.Drawing.Size(108, 28);
+			this.button1.TabIndex = 4;
+			this.button1.Text = "Request one frame";
+			this.button1.UseVisualStyleBackColor = true;
+			// 
+			// textBox1
+			// 
+			this.textBox1.Location = new System.Drawing.Point(84, 29);
+			this.textBox1.Name = "textBox1";
+			this.textBox1.Size = new System.Drawing.Size(100, 20);
+			this.textBox1.TabIndex = 13;
+			this.textBox1.Text = "0x12345678";
+			// 
+			// timer
+			// 
+			this.timer.Enabled = true;
+			this.timer.Interval = 500;
+			this.timer.Tick += new System.EventHandler(this.timer_Tick);
 			// 
 			// canvas
 			// 
@@ -180,9 +282,9 @@
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
 			this.canvas.Image = null;
-			this.canvas.Location = new System.Drawing.Point(12, 72);
+			this.canvas.Location = new System.Drawing.Point(12, 223);
 			this.canvas.Name = "canvas";
-			this.canvas.Size = new System.Drawing.Size(1053, 591);
+			this.canvas.Size = new System.Drawing.Size(1053, 440);
 			this.canvas.TabIndex = 0;
 			this.canvas.Text = "zoomableCanvas1";
 			this.canvas.VirtualMode = false;
@@ -194,26 +296,26 @@
 			this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
 			this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
 			this.ClientSize = new System.Drawing.Size(1077, 804);
-			this.Controls.Add(this.lblBufferType);
-			this.Controls.Add(this.cbBufferType);
-			this.Controls.Add(this.ckbJetColormap);
+			this.Controls.Add(this.gbOffset);
+			this.Controls.Add(this.gbProcess);
 			this.Controls.Add(this.tbLog);
 			this.Controls.Add(this.statusStrip);
-			this.Controls.Add(this.cbAutoRefresh);
-			this.Controls.Add(this.checkBox1);
-			this.Controls.Add(this.btnConnect);
-			this.Controls.Add(this.tbExecutablePath);
-			this.Controls.Add(this.btnRequestSingleFrame);
-			this.Controls.Add(this.btnInject);
-			this.Controls.Add(this.btnLaunch);
 			this.Controls.Add(this.canvas);
+			this.Controls.Add(this.gbLayers);
 			this.KeyPreview = true;
 			this.Name = "MainForm";
 			this.Text = "CNC Buffer Spy Client";
 			this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.MainForm_FormClosing);
+			this.Load += new System.EventHandler(this.MainForm_Load);
 			this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.MainForm_KeyDown);
 			this.statusStrip.ResumeLayout(false);
 			this.statusStrip.PerformLayout();
+			this.gbLayers.ResumeLayout(false);
+			this.gbLayers.PerformLayout();
+			this.gbProcess.ResumeLayout(false);
+			this.gbProcess.PerformLayout();
+			this.gbOffset.ResumeLayout(false);
+			this.gbOffset.PerformLayout();
 			this.ResumeLayout(false);
 			this.PerformLayout();
 
@@ -228,7 +330,6 @@
 		private System.Windows.Forms.ToolTip toolTip;
 		private System.Windows.Forms.TextBox tbExecutablePath;
 		private System.Windows.Forms.Button btnConnect;
-		private System.Windows.Forms.CheckBox checkBox1;
 		private System.Windows.Forms.CheckBox cbAutoRefresh;
 		private System.Windows.Forms.StatusStrip statusStrip;
 		private System.Windows.Forms.ToolStripStatusLabel toolStripLabel;
@@ -236,6 +337,16 @@
 		private System.Windows.Forms.CheckBox ckbJetColormap;
 		private System.Windows.Forms.ComboBox cbBufferType;
 		private System.Windows.Forms.Label lblBufferType;
+		private System.Windows.Forms.GroupBox gbLayers;
+		private System.Windows.Forms.GroupBox gbProcess;
+		private System.Windows.Forms.Label lblConnected;
+		private System.Windows.Forms.Label lblInjected;
+		private System.Windows.Forms.Label lblRunning;
+		private System.Windows.Forms.GroupBox gbOffset;
+		private System.Windows.Forms.TextBox textBox1;
+		private System.Windows.Forms.Label lblOffset;
+		private System.Windows.Forms.Button button1;
+		private System.Windows.Forms.Timer timer;
 	}
 }
 

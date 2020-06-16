@@ -6,11 +6,13 @@ using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.IO.Pipes;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using CncBufferSpyClient.Properties;
 
 namespace CncBufferSpyClient {
 	public partial class MainForm : Form {
@@ -29,7 +31,7 @@ namespace CncBufferSpyClient {
 		private Bitmap _buffer1;
 		private Bitmap _buffer2;
 		private Size _buffersSize; // for cross-thread access
-		private SurfaceType _surfaceRequestType = SurfaceType.Invalid; 
+		private SurfaceType _surfaceRequestType = SurfaceType.Invalid;
 		private int failCounter;
 
 
@@ -43,6 +45,7 @@ namespace CncBufferSpyClient {
 			if (Interop.StartProcess(tbExecutablePath.Text)) {
 				Log("Process started successfully\r\n");
 				OpenPipeStream();
+				UpdateProcessStatus();
 			}
 			else
 				tbLog.AppendText("Failed to start process, aborting\r\n");
@@ -52,6 +55,7 @@ namespace CncBufferSpyClient {
 			if (Interop.InjectToRunningProcess(tbExecutablePath.Text)) {
 				Log("Injected successfully\r\n");
 				OpenPipeStream();
+				UpdateProcessStatus();
 			}
 			else
 				Log("Failed to inject, is process not running, injection already placed, or process to inject of higher elevation level?");
@@ -356,6 +360,7 @@ namespace CncBufferSpyClient {
 			_die = true;
 			_ctsPipeClient.Cancel();
 			ReleaseHandles();
+			Settings.Default.Save();
 		}
 
 		private unsafe void canvas_MouseMove(object sender, MouseEventArgs e) {
@@ -405,10 +410,73 @@ namespace CncBufferSpyClient {
 
 		private void cbBufferType_SelectedIndexChanged(object sender, EventArgs e) {
 			bool newRequest = cbAutoRefresh.Checked;
- 			_surfaceRequestType = (SurfaceType)cbBufferType.SelectedIndex;
-            if (newRequest) {
-	            RequestFrame(true);
-            }
+			_surfaceRequestType = (SurfaceType)cbBufferType.SelectedIndex;
+			if (newRequest) {
+				RequestFrame(true);
+			}
+		}
+
+		private void timer_Tick(object sender, EventArgs e) {
+			UpdateProcessStatus();
+		}
+
+		private void UpdateProcessStatus() {
+			IntPtr handle = IntPtr.Zero;
+
+			// Determine if process is running
+			foreach (var p in Process.GetProcesses()) {
+				// need to leave managed land here in order to avoid win32 exceptions if looking into processes we shouldn't
+				handle = Interop.OpenProcess(0x0400 | 0x0010, false, p.Id);
+				if (handle == IntPtr.Zero)
+					continue;
+
+				var filename = new StringBuilder(4096);
+				if (Interop.GetModuleFileNameEx(handle, IntPtr.Zero, filename, filename.Capacity) > 0) {
+					if (filename.ToString().Equals(tbExecutablePath.Text, StringComparison.InvariantCultureIgnoreCase)) {
+						break; // intentially leaving handle open to enumerate modules!
+					}
+				}
+				Interop.CloseHandle(handle);
+			}
+			lblRunning.Text = handle != IntPtr.Zero ? "RUNNING" : "NOT RUNNING";
+			lblRunning.ForeColor = handle != IntPtr.Zero ? Color.Green : Color.Red;
+
+			// Determine if DLL to be injected is loaded in process
+			bool injected = false;
+
+			if (handle != IntPtr.Zero) {
+				string expectedModuleName =
+					Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location),
+						"CncBufferSpyHook.dll"));
+
+				IntPtr[] hMods = new IntPtr[1024];
+				GCHandle gch = GCHandle.Alloc(hMods, GCHandleType.Pinned); // Don't forget to free this later
+				IntPtr pModules = gch.AddrOfPinnedObject();
+				uint uiSize = (uint)(Marshal.SizeOf(typeof(IntPtr)) * hMods.Length);
+				if (Interop.EnumProcessModules(handle, pModules, uiSize, out uint cbNeeded)) {
+					long uiTotalNumberofModules = cbNeeded / Marshal.SizeOf(typeof(IntPtr));
+
+					var sb = new StringBuilder(4096);
+					for (int i = 0; i < (int)uiTotalNumberofModules; i++) {
+						Interop.GetModuleFileNameEx(handle, hMods[i], sb, sb.Capacity);
+						if (Path.GetFullPath(sb.ToString()).Equals(expectedModuleName)) {
+							injected = true;
+							break;
+						}
+					}
+				}
+				gch.Free();
+				Interop.CloseHandle(handle);
+			}
+
+			lblInjected.Text = injected ? "INJECTED" : "NOT INJECTED";
+			lblInjected.ForeColor = injected ? Color.Green : Color.Red;
+
+			lblConnected.Text = _pipeClient?.CanRead == true ? "CONNECTED" : "NOT CONNECTED";
+			lblConnected.ForeColor = _pipeClient?.CanRead == true ? Color.Green : Color.Red;
+		}
+
+		private void MainForm_Load(object sender, EventArgs e) {
 		}
 	}
 }
