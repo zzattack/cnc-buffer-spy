@@ -11,9 +11,8 @@ class PipeServer
 {
 public:
     typedef std::function<void(std::vector<unsigned char>)> dataReceivedCallback;
-
-    void start(dataReceivedCallback dataReceivedCallback);
-    void stop();
+    explicit PipeServer(dataReceivedCallback dataReceivedCallback);
+    ~PipeServer();
     void writeToPipe(const std::vector<unsigned char>& data);
 
 private:
@@ -36,8 +35,11 @@ private:
     OVERLAPPED oRead;
     OVERLAPPED oWrite;
     OVERLAPPED oNewData;
+    bool keepAlive;
     BOOL writeInProgress = false;
 
+    void start();
+    void stop();
     void threadFunc();
     bool createAndConnectPipe();
     void flushWriteQueue();

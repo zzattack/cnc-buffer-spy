@@ -8,15 +8,28 @@
 #include <utility>
 
 
-void PipeServer::start(dataReceivedCallback dataReceivedCallback)
+PipeServer::PipeServer(dataReceivedCallback dataReceivedCallback)
 {
     instance.server = this; // prepare OVERLAPPED struct with a pointer to ourselves
     onDataReceived = std::move(dataReceivedCallback);
+    start();
+}
+
+PipeServer::~PipeServer()
+{
+    stop();
+}
+
+void PipeServer::start()
+{
+    keepAlive = true;
     pipeThread = std::thread(&PipeServer::threadFunc, this);
 }
 
 void PipeServer::stop()
 {
+    keepAlive = false;
+    SetEvent(oNewData.hEvent);
     pipeThread.join();
 }
 
@@ -37,7 +50,7 @@ void PipeServer::threadFunc()
     // Call a subroutine to create one instance, and wait for the client to connect. 
     (void)createAndConnectPipe();
 
-    while (true)
+    while (keepAlive)
     {
         // Wait for a client to connect, or for a read or write operation to be completed, which
         // causes a completion routine to be queued for execution. 
@@ -114,6 +127,12 @@ void PipeServer::threadFunc()
             }
         }
     }
+
+    CloseHandle(hPipe);
+    CloseHandle(oConnect.hEvent);
+    CloseHandle(oRead.hEvent);
+    CloseHandle(oWrite.hEvent);
+    CloseHandle(oNewData.hEvent);
 }
 
 void PipeServer::flushWriteQueue()

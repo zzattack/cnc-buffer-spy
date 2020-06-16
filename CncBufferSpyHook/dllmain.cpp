@@ -9,7 +9,7 @@
 
 HINSTANCE sInstanceHandle;
 bool sIsHookedInstance = false;
-PipeServer pipeServer;
+std::shared_ptr<PipeServer> pipeServer;
 HANDLE hMap1 = NULL, hMap2 = NULL;
 unsigned int mapFileSize = 0;
 void* pMapBuf1 = NULL, * pMapBuf2 = NULL;
@@ -83,16 +83,16 @@ int __cdecl GameLoopSpy(OffsetCollection* offsets) {
             msg.frame.sourceAnchor = (*zbuf)->buffer_anchor;
             msg.frame.bytesPerPixel = 2;
             std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
-            pipeServer.writeToPipe(v);
+            pipeServer->writeToPipe(v);
             requestHandled = true;
         }
 
         if (!requestHandled)
         {
             // negative acknowledge
-            PipeMessage msg { .messageType = PipeMessageType::FrameRequestFailed };
+            PipeMessage msg{ .messageType = PipeMessageType::FrameRequestFailed };
             std::vector<unsigned char> v((unsigned char*)&msg, (unsigned char*)&msg + sizeof(msg));
-            pipeServer.writeToPipe(v);
+            pipeServer->writeToPipe(v);
         }
 
         delete req;
@@ -312,7 +312,7 @@ bool APIENTRY DllMain(HINSTANCE hInstance, DWORD dwReason, void* lpReserved)
             }
 
             if (hookSuccess)
-                pipeServer.start(OnDataReceived);
+                pipeServer.reset(new PipeServer(OnDataReceived));
             else
                 MessageBox(NULL, "Hooking failed, not starting pipe server", "Error", 0);
 
@@ -341,6 +341,7 @@ bool APIENTRY DllMain(HINSTANCE hInstance, DWORD dwReason, void* lpReserved)
             if (hMap2) CloseHandle(hMap2);
             pMapBuf1 = pMapBuf2 = NULL;
             hMap1 = hMap2 = NULL;
+            pipeServer.reset();
 
             return true;
 
