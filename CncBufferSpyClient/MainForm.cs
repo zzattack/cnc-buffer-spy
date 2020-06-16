@@ -21,19 +21,22 @@ namespace CncBufferSpyClient {
 		private MemoryMappedViewAccessor _mapView1;
 		private MemoryMappedViewAccessor _mapView2;
 		private MemoryMappedViewAccessor _mapViewOfShownImage;
-		private object mapViewLock = new object();
-		CancellationTokenSource _ctsPipeClient = new CancellationTokenSource();
+		private readonly object mapViewLock = new object();
+		private readonly CancellationTokenSource _ctsPipeClient = new CancellationTokenSource();
 		private PipeFrame _lastFrame;
-		private DestinationBuffer _lastBuffer;
+		private PipeRequest _lastRequest;
+		private readonly object requestLock = new object();
 		private Bitmap _buffer1;
 		private Bitmap _buffer2;
 		private Size _buffersSize; // for cross-thread access
-		private SurfaceType _surfaceRequestType; // for cross-thread access
+		private SurfaceType _surfaceRequestType = SurfaceType.Invalid; 
+		private int failCounter;
 
 
 		public MainForm() {
 			InitializeComponent();
 			cbBufferType.DataSource = Enum.GetValues(typeof(SurfaceType)).OfType<SurfaceType>().Where(e => e != SurfaceType.Invalid).ToList();
+			_lastFrame.SurfaceType = SurfaceType.Invalid;
 		}
 
 		private void buttonLaunch_Click(object sender, EventArgs e) {
@@ -62,8 +65,7 @@ namespace CncBufferSpyClient {
 		private void OpenPipeStream() {
 			if (_pipeClient?.IsConnected != true) {
 				_pipeClient?.Dispose();
-				_pipeClient = new NamedPipeClientStream(".", "cnc_buffer_spy", PipeDirection.InOut,
-					PipeOptions.Asynchronous);
+				_pipeClient = new NamedPipeClientStream(".", "cnc_buffer_spy", PipeDirection.InOut, PipeOptions.Asynchronous);
 				Task.Run(() => RunPipeClient(_pipeClient));
 			}
 			else
@@ -91,28 +93,45 @@ namespace CncBufferSpyClient {
 				}
 			}
 			catch {
-				Log("Failed to connect to named pipe\r\n");
+				Log("Pipe connection broken\r\n");
 			}
 		}
 
 		private void HandleMessage(PipeMessage message) {
 			if (message.MessageType == PipeMessageType.FrameAvailable) {
-				var img = ImageFromMappedFileView(message.frame);
+
+				lock (requestLock) {
+					if (message.frame.DestBuffer != _lastRequest.DestinationBuffer) {
+						// Drop this frame, it's from an older outstanding request for which we may no longer
+						// have the associated map view handles.
+						return;
+					}
+				}
+
+				Bitmap img;
+				failCounter = 0;
+				lock (mapViewLock)
+					img = ImageFromMappedFileView(message.frame);
 				lock (canvas.ImageLock)
 					canvas.Image = img;
-				_lastBuffer = message.frame.DestBuffer;
 
 				if (cbAutoRefresh.Checked)
 					// request next image in alternating buffer
-					RequestFrame(message.frame.DestBuffer == DestinationBuffer.Buffer1 ? DestinationBuffer.Buffer2 : DestinationBuffer.Buffer1, false);
+					RequestFrame(false);
 				else
 					Log($"Received frame #{message.frame.FrameNumber} of size {message.frame.Width}x{message.frame.Height} in buffer {(int)message.frame.DestBuffer}\r\n");
 			}
 			else if (message.MessageType == PipeMessageType.FrameRequestFailed) {
-				BeginInvoke((Action)delegate {
-					Log("Outstanding request failed, disabling auto-refresh");
-					cbAutoRefresh.Checked = false;
-				});
+				failCounter++;
+				if (failCounter < 2) {
+					RequestFrame(false);
+				}
+				else {
+					BeginInvoke((Action)delegate {
+						Log("Outstanding request failed successively, disabling auto-refresh\r\n");
+						cbAutoRefresh.Checked = false;
+					});
+				}
 			}
 		}
 
@@ -122,7 +141,7 @@ namespace CncBufferSpyClient {
 
 			var view = frame.DestBuffer == DestinationBuffer.Buffer1 ? _mapView1 : _mapView2;
 			var bm = frame.DestBuffer == DestinationBuffer.Buffer1 ? _buffer1 : _buffer2;
-			Debug.Assert(bm != canvas.Image);
+			// Debug.Assert(bm != canvas.Image); // this assert would only work under a lock {}
 
 			byte* ptr = null;
 			view.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
@@ -237,22 +256,21 @@ namespace CncBufferSpyClient {
 			}
 
 			try {
-				lock (canvas.ImageLock)
+				ReleaseHandles();
+
+				lock (mapViewLock) {
+					_mappedFile1 = MemoryMappedFile.OpenExisting("cnc_buffer_spy1", MemoryMappedFileRights.Read);
+					_mapView1 = _mappedFile1.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+
+					_mappedFile2 = MemoryMappedFile.OpenExisting("cnc_buffer_spy2", MemoryMappedFileRights.Read);
+					_mapView2 = _mappedFile2.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+				}
+
+				lock (canvas.ImageLock) {
 					canvas.Image = null;
-				_mapView1?.Dispose();
-				_mapView2?.Dispose();
-				_mappedFile1?.Dispose();
-				_mappedFile2?.Dispose();
-				_buffer1?.Dispose();
-				_buffer2?.Dispose();
-
-				_mappedFile1 = MemoryMappedFile.OpenExisting("cnc_buffer_spy1", MemoryMappedFileRights.Read);
-				_mapView1 = _mappedFile1.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
-				_buffer1 = new Bitmap((int)frame.Width, (int)frame.Height, PixelFormat.Format24bppRgb);
-
-				_mappedFile2 = MemoryMappedFile.OpenExisting("cnc_buffer_spy2", MemoryMappedFileRights.Read);
-				_mapView2 = _mappedFile2.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
-				_buffer2 = new Bitmap((int)frame.Width, (int)frame.Height, PixelFormat.Format24bppRgb);
+					_buffer1 = new Bitmap((int)frame.Width, (int)frame.Height, PixelFormat.Format24bppRgb);
+					_buffer2 = new Bitmap((int)frame.Width, (int)frame.Height, PixelFormat.Format24bppRgb);
+				}
 
 				_buffersSize = new Size((int)frame.Width, (int)frame.Height);
 				return true;
@@ -262,21 +280,50 @@ namespace CncBufferSpyClient {
 			}
 		}
 
-		private void btnRequestFrame_Click(object sender, EventArgs e) {
-			RequestFrame(_lastBuffer == DestinationBuffer.Buffer1 ? DestinationBuffer.Buffer2 : DestinationBuffer.Buffer1, true); // always alternate buffers
+		private void ReleaseHandles() {
+			// This is only done when allocated buffers are not (anymore) compatible with that just came in.
+			lock (mapViewLock) {
+				_mapViewOfShownImage = null;
+				_mapView1?.Dispose();
+				_mapView2?.Dispose();
+				_mapView1 = _mapView2 = null;
+				_mappedFile1?.Dispose();
+				_mappedFile2?.Dispose();
+				_mappedFile1 = _mappedFile2 = null;
+
+				lock (canvas.ImageLock) {
+					canvas.Image = null;
+					_buffer1?.Dispose();
+					_buffer2?.Dispose();
+					_buffer1 = _buffer2 = null;
+				}
+			}
 		}
 
-		private async void RequestFrame(DestinationBuffer buffer, bool log) {
+		private void btnRequestFrame_Click(object sender, EventArgs e) {
+			RequestFrame(true); // always alternate buffers
+		}
+
+		private void RequestFrame(bool log) {
 			if (_pipeClient == null) {
 				Log("No pipe to write to!");
 				return;
+			}
+
+			if (_surfaceRequestType != _lastFrame.SurfaceType) {
+				// We are requesting a different surface type than the last one we received, which means hook DLL will likely
+				// have to reallocate the shared memory, so we must release our handles to it, as it will be allocated under
+				// the same name.
+				ReleaseHandles();
 			}
 
 			// define request
 			var msg = new PipeMessage();
 			msg.MessageType = PipeMessageType.FrameRequest;
 			msg.request = new PipeRequest();
-			msg.request.DestinationBuffer = buffer;
+			msg.request.DestinationBuffer = _lastRequest.DestinationBuffer == DestinationBuffer.Buffer1
+				? DestinationBuffer.Buffer2
+				: DestinationBuffer.Buffer1; // alternate
 			msg.request.SurfaceType = _surfaceRequestType;
 
 			// convert to payload
@@ -287,25 +334,28 @@ namespace CncBufferSpyClient {
 			Marshal.Copy(ptr, buff, 0, size);
 			Marshal.FreeHGlobal(ptr);
 
-			if (log) Log("Requesting next frame...");
-			await _pipeClient.WriteAsync(buff, 0, size);
-			if (log) Log("done\r\n");
+			try {
+				if (log) Log("Requesting next frame...");
+				lock (requestLock) {
+					_pipeClient.Write(buff, 0, size);
+					_lastRequest = msg.request;
+				}
+
+				if (log) Log("done\r\n");
+			}
+			catch (ObjectDisposedException) { }
+			catch (IOException) { }
 		}
 
 		private void cbAutoRefresh_CheckedChanged(object sender, EventArgs e) {
 			if (cbAutoRefresh.Checked)
-				RequestFrame(_lastBuffer == DestinationBuffer.Buffer1 ? DestinationBuffer.Buffer2 : DestinationBuffer.Buffer1, false);
+				RequestFrame(false);
 		}
 
 		private void MainForm_FormClosing(object sender, FormClosingEventArgs e) {
 			_die = true;
 			_ctsPipeClient.Cancel();
-			_mapView1?.Dispose();
-			_mapView2?.Dispose();
-			_mappedFile1?.Dispose();
-			_mappedFile2?.Dispose();
-			_buffer1?.Dispose();
-			_buffer2?.Dispose();
+			ReleaseHandles();
 		}
 
 		private unsafe void canvas_MouseMove(object sender, MouseEventArgs e) {
@@ -313,7 +363,7 @@ namespace CncBufferSpyClient {
 			Point location;
 			ushort bufValue = 0x5A5A;
 			lock (mapViewLock) {
-				if (_mapViewOfShownImage == null || canvas.Image == null)
+				if (_mapViewOfShownImage == null)
 					return;
 
 				// bounds check
@@ -354,16 +404,11 @@ namespace CncBufferSpyClient {
 		}
 
 		private void cbBufferType_SelectedIndexChanged(object sender, EventArgs e) {
-			// release outstanding buffer handles as after request
-			// these can be released by hook DLL
-			lock (mapViewLock) {
-				_mapViewOfShownImage = null;
-				_mapView1?.Dispose();
-				_mapView2?.Dispose();
-				_mapView1 = _mapView2 = null;
-			}
-
-			_surfaceRequestType = (SurfaceType)cbBufferType.SelectedIndex;
+			bool newRequest = cbAutoRefresh.Checked;
+ 			_surfaceRequestType = (SurfaceType)cbBufferType.SelectedIndex;
+            if (newRequest) {
+	            RequestFrame(true);
+            }
 		}
 	}
 }
